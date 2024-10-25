@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
-    "devStart": "nodemon server.ts",
+    "devStart": "nodemon --ignore data server.ts",
     "generate-swagger": "swagger-jsdoc -d ./src/swagger.json",
     "lint": "eslint . --ext .ts",
     "lint-and-fix": "eslint . --ext .ts --fix",

@@ -10,6 +10,7 @@ import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUiExpress from "swagger-ui-express";
 import {fsReadFile} from 'ts-loader/dist/utils';
 import * as process from 'process';
+import {cron} from 'node-cron';
 
 import { Config } from "./src/config/config";
 
@@ -63,6 +64,8 @@ function setupSwagger(app){
 
 }
 
+const server = new InversifyExpressServer(container);
+
 if(cluster.isPrimary){
     for(let i = 0; i < cCPUs; i++){
         cluster.fork();
@@ -75,8 +78,13 @@ if(cluster.isPrimary){
     cluster.on('exit', function (worker){
         console.log('Worker ' + worker.process.pid + ' closed')
     })
+
+    // cron.schedule('* * * * *', () => {
+        
+    //   });
+
 }else{
-    const server = new InversifyExpressServer(container);
+    
 
     server.setConfig((app) =>{
         setupSwagger(app);

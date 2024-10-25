@@ -6,6 +6,7 @@ import { FileService } from '../services/file.service';
 import { AwsStorageService } from '../helpers/awsStorage.service';
 
 import '../controllers/polkassembly.controller';
+import '../controllers/s3.controller';
 
 const container = new Container();
 

@@ -105,11 +105,12 @@ export class S3Controller extends BaseHttpController {
      *         description: Internal server error
      */
     @httpGet('/s3GetFile')
-    async getFileFromS3(
+    async s3GetFile(
         @response() res: Response,
         @queryParam('key') key: string
     ) {
         try {
+    
             const file = await this.awsStorageService.getFile(key);
 
             if (!file.Body) {

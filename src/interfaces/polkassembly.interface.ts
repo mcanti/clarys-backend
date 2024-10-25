@@ -15,3 +15,7 @@ export interface ListOnChainPostsParamsInterface {
     listingLimit: number,
     sortBy: string
 }
+
+export interface AllOpenGovPostsInterface {
+    govType: string,
+}

@@ -3,8 +3,9 @@ import cors from 'cors';
 import cluster from "cluster";
 import os from "os";
 import { join } from 'path';
-import {Container} from 'inversify'
 import "reflect-metadata";
+import { container } from "./src/config/inversify.config";
+
 import swaggerJsdoc from "swagger-jsdoc";
 import swaggerUiExpress from "swagger-ui-express";
 import {fsReadFile} from 'ts-loader/dist/utils';
@@ -12,14 +13,8 @@ import * as process from 'process';
 
 import { Config } from "./src/config/config";
 
-import { PolkassemblyService } from './src/services/polkassembly.service'
-
-import { AwsStorageService } from './src/helpers/awsStorage.service';
 import { responseWrapper } from './src/middleware/response.middleware';
 import { SwaggerHelper } from './src/helpers/swaggerHelper';
-
-// import './src/controllers/s3.controller';
-import './src/controllers/polkassembly.controller';
 
 import { InversifyExpressServer } from "inversify-express-utils";
 
@@ -44,16 +39,6 @@ function setupStatusPage(app){
     })
 }
 
-function bindServices(container: Container){
-    container
-    .bind<PolkassemblyService>(PolkassemblyService.name)
-    .to(PolkassemblyService)
-
-    container
-    .bind<AwsStorageService>(AwsStorageService.name)
-    .to(AwsStorageService)
-}
-
 function setupSwagger(app){
     
     const swaggerOptions = {
@@ -67,7 +52,6 @@ function setupSwagger(app){
         },
         apis: [
             './src/controllers/*.ts',
-            './src/controllers/polkassembly.controller.ts',
             __dirname + '/src/controllers/*.ts',
         ]
     }
@@ -92,22 +76,15 @@ if(cluster.isPrimary){
         console.log('Worker ' + worker.process.pid + ' closed')
     })
 }else{
-    const container = new Container();
-    bindServices(container);
-    
-    console.log(container.get<express.RequestHandler>(PolkassemblyService.name))
-
-    const server = new InversifyExpressServer(
-        container,
-        null,
-        null,
-        null,
-        null
-    );
+    const server = new InversifyExpressServer(container);
 
     server.setConfig((app) =>{
         setupSwagger(app);
-        app.use(cors());
+        app.use(cors({
+            origin: 'http://localhost:3000',
+            methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+            credentials: false
+        }));
         app.use(responseWrapper);
         app.use(express.json());
     });

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import ApiResponse, { ResponseWrapperCode } from "../helpers/responseWrapper.service";
+import ApiResponse, { ResponseWrapperCode } from "../services/responseWrapper.service";
 
 declare module 'express' {
     interface Response {

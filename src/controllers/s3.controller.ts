@@ -2,8 +2,11 @@ import { Request, Response } from 'express';
 import { inject } from 'inversify';
 import { BaseHttpController, controller, httpGet,httpPost, request,requestBody, requestParam, queryParam, response } from "inversify-express-utils";
 
-import { AwsStorageService } from "../helpers/awsStorage.service";
-import { ResponseWrapperCode } from "../helpers/responseWrapper.service";
+import { AwsStorageService } from "../services/awsStorage.service";
+import { ResponseWrapperCode } from "../services/responseWrapper.service";
+
+import { Readable } from 'stream';
+import {streamToString} from "../helpers/streamToStringHelper"
 
 @controller('/api/s3')
 export class S3Controller extends BaseHttpController {
@@ -111,22 +114,74 @@ export class S3Controller extends BaseHttpController {
     ) {
         try {
     
-            const file = await this.awsStorageService.getFile(key);
+            const response = await this.awsStorageService.getFile(key);
 
-            if (!file.Body) {
+            if (!response.Body) {
                 const ErrorResponse = ResponseWrapperCode.missingItem;
                 ErrorResponse.message =`File with key ${key} not found in S3`;
                 return res.apiError(ErrorResponse);
             }
 
-            res.setHeader('Content-Type', file.ContentType || 'application/json');
-            res.setHeader('Content-Length', file.ContentLength || 0);
-            file.Body.pipe(res);
+            const jsonData = await streamToString(response.Body as Readable);
+            const parsedData = JSON.parse(jsonData);
+
+            return res.apiSuccess(parsedData)
         } catch (err) {
             console.error("Error - getFileFromS3: ", err);
 
             const ErrorResponse = ResponseWrapperCode.generalError;
             ErrorResponse.message = `Failed to retrieve file from S3: ${err.message}`;
+            return res.apiError(ErrorResponse);
+        }
+    }
+
+    /**
+     * @swagger
+     * /api/s3/s3ListFilesAndFolders:
+     *   get:
+     *     summary: List files and folders from the bucket and the given path
+     *     parameters:
+     *       - name: objectType
+     *         in: path
+     *         required: false
+     *         schema:
+     *           type: string
+     *         description: The object type you want to list file/folder
+     *       - name: prefix
+     *         in: path
+     *         required: false
+     *         schema:
+     *           type: string
+     *         description: The prefix path
+     *     responses:
+     *       200:
+     *         description: Successfully retrieved the file
+     *         content:
+     *           application/octet-stream:
+     *             schema:
+     *               type: string[]
+     *               format: binary
+     *       404:
+     *         description: Files or folders not found
+     *       500:
+     *         description: Internal server error
+     */
+    @httpGet('/s3ListFilesAndFolders')
+    async s3ListFilesAndFolders(
+        @response() res: Response,
+        @queryParam('objectType') objectType?: string,
+        @queryParam('prefix') prefix?: string
+    ) {
+        try {
+    
+            const response = await this.awsStorageService.listFilesAndFolders(objectType ? objectType:'files', prefix ? prefix: '');
+
+            return res.apiSuccess(response)
+        } catch (err) {
+            console.error("Error - s3ListFilesAndFolders: ", err);
+
+            const ErrorResponse = ResponseWrapperCode.generalError;
+            ErrorResponse.message = `Failed to list files an folders: ${err.message}`;
             return res.apiError(ErrorResponse);
         }
     }

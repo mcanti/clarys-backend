@@ -1,4 +1,4 @@
-import { ResponseWrapperCode } from "./responseWrapper.service";
+import { ResponseWrapperCode } from "../services/responseWrapper.service";
 
 export class SwaggerHelper {
 

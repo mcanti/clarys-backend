@@ -30,7 +30,7 @@ let agent = new https.Agent({
 });
 
 if(process.env.NODE_ENV === 'development'){
-  const certs = [readFileSync("../Zscaler_Root_CA.pem")];
+  const certs = [readFileSync("./Zscaler_Root_CA.pem")];
 
   agent = new https.Agent({
     rejectUnauthorized: true,

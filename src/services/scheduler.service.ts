@@ -2,6 +2,7 @@ import { injectable, inject } from "inversify";
 import cron from "node-cron";
 
 import { PolkassemblyController } from "../controllers/polkassembly.controller";
+import {proposalTypeList} from "../constants/proposalTypes";
 
 @injectable()
 export class SchedulerService {
@@ -11,44 +12,18 @@ export class SchedulerService {
   ) {}
 
   async updateOnChainPosts() {
-    cron.schedule("*/5 * * * *", async () => {
+    cron.schedule("*/30 * * * *", async () => {
       console.log("Running scheduled task...");
-
-      const proposalTypeList = [
-        "democracy_proposals",
-        "tech_committee_proposals",
-        "treasury_proposals",
-        "referendums",
-        "fellowship_referendums",
-        "council_motions",
-        "bounties",
-        "tips",
-        "child_bounties",
-        "referendums_v2",
-      ];
-
-      const trackStatusList = [
-        "All",
-        "Confirmed",
-        "ConfirmStarted",
-        "Cancelled",
-        "Deciding",
-        "DecisionDepositPlaced",
-        "Killed",
-        "Submitted",
-        "Rejected",
-        "TimedOut",
-      ];
 
       try {
         // proposalTypeList.map(async (proposalType) => {
-        //   trackStatusList.map(async (trackStatus) => {
         //     await this.taskService._findOnChainPosts(
         //       proposalType,
-        //       trackStatus,
+        //       "All",
         //       "newest"
         //     );
-        //   });
+        //     console.log(`Updated ${proposalType}-List`);
+            
         // });
 
         console.log("Scheduled task completed successfully.");

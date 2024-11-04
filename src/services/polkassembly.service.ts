@@ -9,14 +9,14 @@ export class PolkassemblyService {
 
     async OnChainPost(params: OnChainPostParamsInterface) {
         try {
-            const response = await axios.get(`https://api.polkassembly.io/api/v1/posts/on-chain-post`, {
+            const response = await axios.get(`https://polkadot.polkassembly.io/api/v1/posts/on-chain-post`, {
                 params: {
                     proposalType: params.proposalType,
                     postId: params.postId
                 },
                 maxBodyLength: Infinity,
                 headers: {
-                    'x-network': 'kusama'
+                    'x-network': 'polkadot'
                 }, 
                 httpsAgent: new https.Agent({
                     rejectUnauthorized: false // Ignore SSL certificate errors
@@ -39,7 +39,7 @@ export class PolkassemblyService {
                 },
                 maxBodyLength: Infinity,
                 headers: {
-                    'x-network': 'kusama'
+                    'x-network': 'polkadot'
                 },
                 httpsAgent: new https.Agent({
                     rejectUnauthorized: false // Ignore SSL certificate errors
@@ -64,7 +64,7 @@ export class PolkassemblyService {
                 },
                 maxBodyLength: Infinity,
                 headers: {
-                    'x-network': 'kusama'
+                    'x-network': 'polkadot'
                 },
                 httpsAgent: new https.Agent({
                     rejectUnauthorized: false // Ignore SSL certificate errors
@@ -86,7 +86,7 @@ export class PolkassemblyService {
                 },
                 maxBodyLength: Infinity,
                 headers: {
-                    'x-network': 'kusama'
+                    'x-network': 'polkadot'
                 },
                 httpsAgent: new https.Agent({
                     rejectUnauthorized: false // Ignore SSL certificate errors

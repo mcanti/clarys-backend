@@ -26,18 +26,9 @@ export class GoogleServices {
   private drive: drive_v3.Drive;
 
   constructor(
-    // @inject("GoogleAPIConfig") googleConfig: GoogleAPIConfigInterface,
     @inject("AwsStorageService") private awsStorageService: AwsStorageService
   ) {
-    // const oAuth2Client = new google.auth.OAuth2(
-    //   googleConfig.clientId,
-    //   googleConfig.clientSecret,
-    //   googleConfig.redirectUri
-    // );
-    // oAuth2Client.setCredentials({
-    //   access_token: googleConfig.accessToken,
-    // });
-    // this.drive = google.drive({ version: "v3", auth: oAuth2Client });
+    
   }
 
   private async streamToBuffer(stream: Stream): Promise<Buffer> {
@@ -51,12 +42,7 @@ export class GoogleServices {
 
   async uploadGoogleDocToS3(fileId: string, folderDocs: string): Promise<void> {
     try {
-      // const response = await this.drive.files.export(
-      //   { fileId, mimeType: "application/pdf" },
-      //   { responseType: "stream" }
-      // );
-
-      const exportUrl = `https://docs.google.com/document/d/${fileId}/export?format=pdf`;
+      const exportUrl = `https://docs.google.com/document/d/${fileId}/export?format=docx`;
       const response = await axios.get(exportUrl, {
         responseType: "stream",
         httpsAgent: new https.Agent({
@@ -77,8 +63,8 @@ export class GoogleServices {
 
       await this.awsStorageService.uploadFilesToS3(
         bufferDoc,
-        `${folderDocs}/${fileId}.pdf`,
-        "application/pdf"
+        `${folderDocs}/${fileId}.docx`,
+        "application/docx"
       );
 
       console.log(`File from Google Docs uploaded to S3`);

@@ -73,3 +73,37 @@ export const polkassemblySchemaPostsList = {
         trim: true,
     },
 }
+
+export const polkassemblySchemaOffChainPost = {
+    proposalType: {
+        in: ['query'],
+        exists: {
+            errorMessage: 'proposalType is required',
+        },
+        isString: true,
+        trim: true,
+    },
+    postId: {
+        in: ['query'],
+        exists: {
+            errorMessage: 'postId is required',
+        },
+        isInt: {
+            errorMessage: 'postId must be an integer',
+        },
+        toInt: true,
+    },
+}
+
+export const polkassemblySchemaOffChainPostsList = {
+    proposalType: {
+        in: ['query'],
+        exists: {
+            errorMessage: 'proposalType is required',
+        },
+        isString: {
+            errorMessage: 'proposalType must be a string',
+        },
+        trim: true,
+    },
+}

@@ -119,5 +119,6 @@ if (cluster.isPrimary) {
   console.table(serverInfo);
 
   const scheduler = container.get<SchedulerService>(SchedulerService.name);
-  scheduler.updateOnChainPosts();
+  // scheduler.updateOnChainPostFolder();
+  scheduler.updateOffChainEventsAndSubEventsPostFolder();
 }

@@ -11,6 +11,8 @@ import {
 
 import { PolkassemblyService } from "../services/polkassembly.service";
 import {
+  polkassemblySchemaOffChainPost,
+  polkassemblySchemaOffChainPostsList,
   polkassemblySchemaPost,
   polkassemblySchemaPostByAddress,
   polkassemblySchemaPostsList,
@@ -26,8 +28,14 @@ import {
   findGoogleDocsLinks,
 } from "../helpers/googleDocsLinksFinder.helper";
 
-import { CategoriesList } from "../constants/postCategories";
-import { tagsCategories } from "../constants/tagsCategory";
+import {
+  CategoriesList,
+  CategoriesAndTags,
+  CategoriesForKeyword,
+} from "../constants/postCategories";
+// import { tagsCategories } from "../constants/tagsCategory";
+import { S3Controller } from "./s3.controller";
+import { containsSubstring } from "../helpers/categories.helper";
 
 @controller("/api/polkassembly")
 export class PolkassemblyController extends BaseHttpController {
@@ -37,11 +45,14 @@ export class PolkassemblyController extends BaseHttpController {
     @inject("PolkassemblyService")
     private polkassemblyService: PolkassemblyService,
     @inject("AwsStorageService") private awsStorageService: AwsStorageService,
+    @inject("S3Controller") private s3Controller: S3Controller,
     @inject("GoogleServices") private googleService: GoogleServices,
     @inject("FileService") private fileService: FileService
   ) {
     super();
   }
+
+  //OnChain
 
   async _findOnChainPost(proposalType: string, postId: number) {
     try {
@@ -53,10 +64,6 @@ export class PolkassemblyController extends BaseHttpController {
       });
 
       const googleDocsLinks = findGoogleDocsLinks(response.content);
-      console.log(response.content);
-      
-      console.log("googleDocsLinks", googleDocsLinks);
-      
 
       const filesIds = [];
       googleDocsLinks.forEach((googleDocUrl) => {
@@ -68,16 +75,14 @@ export class PolkassemblyController extends BaseHttpController {
         }
       });
 
-      if(filesIds.length){
+      if (filesIds.length) {
         await Promise.all(
           filesIds.map(async (fileId) => {
-            console.log("fileId: ", fileId);
-            
             await this.googleService.uploadGoogleDocToS3(fileId, folderDocs);
           })
         );
       }
-      
+
       const buffer = Buffer.from(JSON.stringify(response));
 
       const result = await this.awsStorageService.uploadFilesToS3(
@@ -123,6 +128,7 @@ export class PolkassemblyController extends BaseHttpController {
   ) {
     try {
       const folder = `OnChainPosts/${proposalType}`;
+      const fileName = `${proposalType}-List.json`;
       const response = await this.polkassemblyService.ListOnChainPosts({
         proposalType,
         trackStatus,
@@ -159,46 +165,127 @@ export class PolkassemblyController extends BaseHttpController {
       const postsWithCategories = [];
 
       allPosts.forEach((post) => {
+        let categories: string[] = [];
+
         if (post?.tags && post.tags.length > 0) {
-          const categories: string[] = [];
           post.tags.forEach((tag) => {
-            CategoriesList.forEach((category) => {
-              if (tagsCategories[category].includes(tag)) {
-                categories.push(category);
+            CategoriesAndTags.forEach((categoryAndTags) => {
+              if (categoryAndTags.tags.includes(tag)) {
+                categories.push(categoryAndTags.category);
               }
             });
           });
-          postsWithCategories.push({
-            ...post,
-            categories: categories,
-          });
-        } else if (CategoriesList.includes(post.topic.name)) {
-          postsWithCategories.push({
-            ...post,
-            categories: post.topic.name,
-          });
-        } else {
-          postsWithCategories.push({
-            ...post,
-            categories: [],
+        }
+
+        if (
+          post?.topic &&
+          post.topic?.name &&
+          CategoriesList.includes(post.topic.name)
+        ) {
+          categories.push(post.topic.name);
+        }
+
+        if (
+          post?.type &&
+          CategoriesList.includes(post.type)
+        ) {
+          categories.push(post.type);
+        }
+
+        if (post?.title) {
+          CategoriesForKeyword.forEach((categoryForKeyword) => {
+            if (containsSubstring(post.title, categoryForKeyword.keyword)) {
+              categories = [...categories, ...categoryForKeyword.categories];
+            }
           });
         }
+
+        postsWithCategories.push({
+          ...post,
+          categories: categories,
+        });
       });
 
-      const buffer = Buffer.from(
-        JSON.stringify({
+      const storedList = await this.s3Controller._s3GetFile(
+        `${folder}/${fileName}`
+      );
+
+      let buffer;
+      let uploadedFileToS3;
+      const modifiedPostsIds = [];
+
+      if (
+        storedList === null ||
+        typeof storedList === "string" ||
+        (storedList &&
+          storedList?.count &&
+          storedList.count !== postsWithCategories.length)
+      ) {
+        buffer = Buffer.from(
+          JSON.stringify({
+            modifiedPostsIds: [],
+            count: postsWithCategories.length,
+            posts: postsWithCategories,
+          })
+        );
+
+        uploadedFileToS3 = await this.awsStorageService.uploadFilesToS3(
+          buffer,
+          `${folder}/${proposalType}-List.json`,
+          "application/json"
+        );
+      } else {
+        if (storedList?.posts) {
+          storedList.posts.forEach((post) => {
+            postsWithCategories.forEach((newPost) => {
+              if (
+                newPost?.post_id &&
+                post?.post_id &&
+                newPost?.status_history &&
+                post?.status_history &&
+                newPost.post_id === post.post_id
+              ) {
+                if (
+                  newPost.status_history.length > post.status_history.length ||
+                  (newPost.status_history.length ===
+                    post.status_history.length &&
+                    newPost.status_history[newPost.status_history.length - 1]
+                      .status !==
+                      post.status_history[post.status_history.length - 1]
+                        .status)
+                ) {
+                  modifiedPostsIds.push(newPost.post_id);
+                }
+              }
+            });
+          });
+          if (modifiedPostsIds.length > 0) {
+            buffer = Buffer.from(
+              JSON.stringify({
+                modifiedPostsIds: modifiedPostsIds,
+                count: postsWithCategories.length,
+                posts: postsWithCategories,
+              })
+            );
+
+            uploadedFileToS3 = await this.awsStorageService.uploadFilesToS3(
+              buffer,
+              `${folder}/${proposalType}-List.json`,
+              "application/json"
+            );
+          }
+        }
+      }
+
+      return {
+        uploadFileToS3: uploadedFileToS3 != undefined ? true : false,
+        s3Response: uploadedFileToS3 != undefined ? uploadedFileToS3 : null,
+        data: {
+          modifiedPostsIds: modifiedPostsIds,
           count: postsWithCategories.length,
           posts: postsWithCategories,
-        })
-      );
-
-      const uploadedFileToS3 = await this.awsStorageService.uploadFilesToS3(
-        buffer,
-        `${folder}/${proposalType}-List.json`,
-        "application/json"
-      );
-
-      return uploadedFileToS3;
+        },
+      };
     } catch (err) {
       console.log("Error - _findOnChainPosts: ", err);
       throw Error("_findOnChainPosts failed");
@@ -227,7 +314,183 @@ export class PolkassemblyController extends BaseHttpController {
     }
   }
 
+  //OffChain
+
+  async _findOffChainPost(proposalType: string, postId: number) {
+    try {
+      const folder = `OffChainPost/${proposalType}/${postId}`;
+      const folderDocs = `OffChainPost/${proposalType}/${postId}/docs`;
+      const response = await this.polkassemblyService.OffChainPost({
+        proposalType,
+        postId,
+      });
+
+      const googleDocsLinks = findGoogleDocsLinks(response.content);
+
+      console.log("googleDocsLinks", googleDocsLinks);
+
+      const filesIds = [];
+      googleDocsLinks.forEach((googleDocUrl) => {
+        const fieldId = findFiledId(googleDocUrl);
+        if (!fieldId) {
+          console.log("Invalid Google Docs URL provided.");
+        } else {
+          filesIds.push(fieldId);
+        }
+      });
+
+      if (filesIds.length) {
+        await Promise.all(
+          filesIds.map(async (fileId) => {
+            console.log("fileId: ", fileId);
+
+            await this.googleService.uploadGoogleDocToS3(fileId, folderDocs);
+          })
+        );
+      }
+
+      const buffer = Buffer.from(JSON.stringify(response));
+
+      const result = await this.awsStorageService.uploadFilesToS3(
+        buffer,
+        `${folder}/#${postId}.json`,
+        "application/json"
+      );
+
+      return result;
+    } catch (err) {
+      console.log("Error - _findOffChainPost: ", err);
+      throw Error("_findOffChainPost failed");
+    }
+  }
+
+  async _findOffChainPosts(
+    proposalType: string,
+  ) {
+    try {
+      const folder = `OffChainPosts/${proposalType}`;
+      const fileName = `${proposalType}-List.json`;
+      const response = await this.polkassemblyService.ListOffChainPosts({
+        proposalType,
+        page: 1,
+        listingLimit: 1,
+      });
+
+      const limit = 100;
+      let allPosts = [];
+
+      if (response?.count) {
+        const totalPages = Math.ceil(response.count / limit);
+
+        for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+          const responseBatch = await this.polkassemblyService.ListOffChainPosts(
+            {
+              proposalType,
+              page: pageNumber,
+              listingLimit: limit,
+            }
+          );
+
+          if (responseBatch.posts && responseBatch.posts.length) {
+            allPosts = [...allPosts, ...responseBatch.posts];
+          }
+        }
+      }
+
+      const postsWithCategories = [];
+
+      allPosts.forEach((post) => {
+        let categories: string[] = [];
+
+        if (post?.tags && post.tags.length > 0) {
+          post.tags.forEach((tag) => {
+            CategoriesAndTags.forEach((categoryAndTags) => {
+              if (categoryAndTags.tags.includes(tag)) {
+                categories.push(categoryAndTags.category);
+              }
+            });
+          });
+        }
+
+        if (
+          post?.topic &&
+          post.topic?.name &&
+          CategoriesList.includes(post.topic.name)
+        ) {
+          categories.push(post.topic.name);
+        }
+
+        if (
+          post?.type &&
+          CategoriesList.includes(post.type)
+        ) {
+          categories.push(post.type);
+        }
+
+        if (post?.title) {
+          CategoriesForKeyword.forEach((categoryForKeyword) => {
+            if (containsSubstring(post.title, categoryForKeyword.keyword)) {
+              categories = [...categories, ...categoryForKeyword.categories];
+            }
+          });
+        }
+
+        postsWithCategories.push({
+          ...post,
+          categories: [...categories, 'Discussions'],
+        });
+      });
+
+      const storedList = await this.s3Controller._s3GetFile(
+        `${folder}/${fileName}`
+      );
+
+      let buffer;
+      let uploadedFileToS3;
+      const modifiedPostsIds = [];
+
+      if (
+        storedList === null ||
+        typeof storedList === "string" ||
+        (storedList &&
+          storedList?.count &&
+          storedList.count !== postsWithCategories.length)
+      ) {
+        buffer = Buffer.from(
+          JSON.stringify({
+            modifiedPostsIds: [],
+            count: postsWithCategories.length,
+            posts: postsWithCategories,
+          })
+        );
+
+        uploadedFileToS3 = await this.awsStorageService.uploadFilesToS3(
+          buffer,
+          `${folder}/${proposalType}-List.json`,
+          "application/json"
+        );
+      }
+
+      return {
+        uploadFileToS3: uploadedFileToS3 != undefined ? true : false,
+        s3Response: uploadedFileToS3 != undefined ? uploadedFileToS3 : null,
+        data: {
+          modifiedPostsIds: modifiedPostsIds,
+          count: postsWithCategories.length,
+          posts: postsWithCategories,
+        },
+      };
+    } catch (err) {
+      console.log("Error - _findOnChainPosts: ", err);
+      throw Error("_findOnChainPosts failed");
+    }
+  }
+
+
+
   // Exposing API endpoints
+
+  //OnChain
 
   /**
    * @swagger
@@ -417,4 +680,91 @@ export class PolkassemblyController extends BaseHttpController {
       res.apiError(ResponseWrapperCode.generalError);
     }
   }
+
+  //OffChain
+
+    /**
+   * @swagger
+   * /api/polkassembly/findOffChainPost:
+   *   get:
+   *     summary: Find an off-chain post by ID
+   *     parameters:
+   *       - name: proposalType
+   *         in: query
+   *         required: true
+   *         description: The type of the proposal
+   *         schema:
+   *           type: string
+   *       - name: postId
+   *         in: query
+   *         required: true
+   *         description: The ID of the post
+   *         schema:
+   *           type: integer
+   *     responses:
+   *       200:
+   *         description: Successfully retrieved the post
+   *       400:
+   *         description: Invalid input
+   *       500:
+   *         description: Internal server error
+   */
+    @httpGet("/findOffChainPost", validateSchema(polkassemblySchemaOffChainPost))
+    async findOffChainPost(
+      @response() res: Response,
+      @queryParam("proposalType") proposalType: string,
+      @queryParam("postId") postId: number
+    ) {
+      try {
+        const result = await this._findOffChainPost(proposalType, postId);
+  
+        res.apiSuccess({
+          ...result,
+        });
+      } catch (err) {
+        console.log("Error - findOffChainPost: ", err);
+        res.apiError(ResponseWrapperCode.generalError);
+      }
+    }
+  
+
+  /**
+   * @swagger
+   * /api/polkassembly/findOffChainPosts:
+   *   get:
+   *     summary: List off-chain posts
+   *     parameters:
+   *       - name: proposalType
+   *         in: query
+   *         required: true
+   *         description: The type of the proposal
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Successfully retrieved the posts
+   *       400:
+   *         description: Invalid input
+   *       500:
+   *         description: Internal server error
+   */
+  @httpGet("/findOffChainPosts", validateSchema(polkassemblySchemaOffChainPostsList))
+  async findOffChainPosts(
+    @response() res: Response,
+    @queryParam("proposalType") proposalType: string,
+  ) {
+    try {
+      const result = await this._findOffChainPosts(
+        proposalType,
+      );
+
+      res.apiSuccess({
+        ...result,
+      });
+    } catch (err) {
+      console.log("Error - findOffChainPosts: ", err);
+      res.apiError(ResponseWrapperCode.generalError);
+    }
+  }
+
 }

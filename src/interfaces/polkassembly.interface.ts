@@ -19,3 +19,14 @@ export interface ListOnChainPostsParamsInterface {
 export interface AllOpenGovPostsInterface {
     govType: string,
 }
+
+export interface ListOffChainPostsParamsInterface {
+    proposalType: string,
+    page: number,
+    listingLimit: number,
+}
+
+export interface OffChainPostParamsInterface {
+    proposalType: string,
+    postId: number
+}

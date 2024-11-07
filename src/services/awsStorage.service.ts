@@ -10,12 +10,14 @@ import {
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { NodeHttpHandler } from "@aws-sdk/node-http-handler";
-import { Stream } from "stream";
+import { Readable, Stream } from "stream";
 import https from "https";
 import { readFileSync } from "fs";
 import * as process from 'process';
 
+import {streamToString} from "../helpers/streamToStringHelper";
 import { Config } from "../config/config";
+import { ListOnChainPostsResponseInterface } from "../interfaces/s3.interfaces";
 
 if(!process.env.AWS_ACCESS_KEY_ID){ 
   throw Error('AWS_ACCESS_KEY_ID missing')
@@ -85,19 +87,20 @@ export class AwsStorageService {
 
   async getFile(key: string): Promise<GetObjectCommandOutput> {
     try {
-      const getObjectCommand = new GetObjectCommand({
-        Bucket: this.s3Bucket,
-        Key: key,
-      });
+        const getObjectCommand = new GetObjectCommand({
+            Bucket: this.s3Bucket,
+            Key: key,
+        });
 
-      return await this.s3.send(getObjectCommand);
-    } catch (err) {
-      console.error("Error in getFile: ", err);
-      throw new Error(
-        `Unable to retrieve file with key ${key}: ${err.message}`
-      );
+        const response: GetObjectCommandOutput = await this.s3.send(getObjectCommand);
+        
+        return response;
+
+    } catch (err: any) {
+        console.error("Error in getFile: ", err);
+        return null
     }
-  }
+}
 
   async deleteFile(key: string): Promise<any> {
     try {
@@ -116,8 +119,8 @@ export class AwsStorageService {
   }
 
   async listFilesAndFolders(
-    whatToList: string ='files',
-    prefix: string = ""
+    whatToList: string,
+    prefix: string
   ): Promise<string[]> {
 
     try {
@@ -145,7 +148,8 @@ export class AwsStorageService {
       }
 
       if(whatToList === 'folders'){
-        if (response.Contents) {
+        if (response?.CommonPrefixes) {
+
           const folderList = [];
           response.CommonPrefixes.forEach((folder) => {
             folderList.push(folder.Prefix)

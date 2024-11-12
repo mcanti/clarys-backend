@@ -496,6 +496,8 @@ export class PolkassemblyController extends BaseHttpController {
    * @swagger
    * /api/polkassembly/findOnChainPost:
    *   get:
+   *     tags:
+   *       - Polkassembly
    *     summary: Find an on-chain post by ID
    *     parameters:
    *       - name: proposalType
@@ -540,6 +542,8 @@ export class PolkassemblyController extends BaseHttpController {
    * @swagger
    * /api/polkassembly/findPostByAddress:
    *   get:
+   *     tags:
+   *       - Polkassembly
    *     summary: Find posts by proposer address
    *     parameters:
    *       - name: proposerAddress
@@ -580,6 +584,8 @@ export class PolkassemblyController extends BaseHttpController {
    * @swagger
    * /api/polkassembly/findOnChainPosts:
    *   get:
+   *     tags:
+   *       - Polkassembly
    *     summary: List on-chain posts
    *     parameters:
    *       - name: proposalType
@@ -655,6 +661,8 @@ export class PolkassemblyController extends BaseHttpController {
    * @swagger
    * /api/polkassembly/findAllOpenGovPosts:
    *   get:
+   *     tags:
+   *       - Polkassembly
    *     summary: Find All Open Gov Posts
    *     responses:
    *       200:
@@ -687,6 +695,8 @@ export class PolkassemblyController extends BaseHttpController {
    * @swagger
    * /api/polkassembly/findOffChainPost:
    *   get:
+   *     tags:
+   *       - Polkassembly
    *     summary: Find an off-chain post by ID
    *     parameters:
    *       - name: proposalType
@@ -732,6 +742,8 @@ export class PolkassemblyController extends BaseHttpController {
    * @swagger
    * /api/polkassembly/findOffChainPosts:
    *   get:
+   *     tags:
+   *       - Polkassembly
    *     summary: List off-chain posts
    *     parameters:
    *       - name: proposalType

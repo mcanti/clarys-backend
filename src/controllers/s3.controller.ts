@@ -11,6 +11,7 @@ import {
   queryParam,
   response,
 } from "inversify-express-utils";
+import  { Document, Packer } from 'docx';
 
 import { AwsStorageService } from "../services/awsStorage.service";
 import { ResponseWrapperCode } from "../services/responseWrapper.service";
@@ -43,16 +44,38 @@ export class S3Controller extends BaseHttpController {
 
   async _s3GetFile(key: string) {
     try {
+
       const response = await this.awsStorageService.getFile(key);
 
       if (!response.Body) {
         return `File with key ${key} not found in S3`;
       }
 
-      const jsonData = await streamToString(response.Body as Readable);
-      const parsedData = JSON.parse(jsonData);
+      if (key.includes("docx")) {
 
-      return parsedData;
+        if (response.Body instanceof Readable) {
+          const chunks = [];
+
+          for await (const chunk of response.Body) {
+            chunks.push(chunk);
+          }
+          
+          const fileBuffer = Buffer.concat(chunks);
+          return fileBuffer;
+        } else {
+          throw new Error("data.Body is not a readable stream.");
+        }
+        
+
+        return response;
+      } else{
+
+        const jsonData = await streamToString(response.Body as Readable);
+        const parsedData = JSON.parse(jsonData);
+  
+        return parsedData;
+      }
+      
     } catch (err) {
       console.error("Error - _s3GetFile: ", err);
       return null;
@@ -65,7 +88,7 @@ export class S3Controller extends BaseHttpController {
         objectType,
         prefix
       );
-      
+
       return response;
     } catch (err) {
       console.error("Error - _s3ListFilesAndFolders: ", err);
@@ -79,6 +102,8 @@ export class S3Controller extends BaseHttpController {
    * @swagger
    * /api/s3/s3UploadFiles:
    *   post:
+   *     tags:
+   *       - S3
    *     summary: Upload files to S3
    *     requestBody:
    *       required: true
@@ -149,6 +174,8 @@ export class S3Controller extends BaseHttpController {
    * @swagger
    * /api/s3/s3GetFile/{key}:
    *   get:
+   *     tags:
+   *       - S3
    *     summary: Get a file from S3
    *     parameters:
    *       - name: key
@@ -175,6 +202,15 @@ export class S3Controller extends BaseHttpController {
     try {
       const response = await this._s3GetFile(key);
 
+      const docName = key.split('/');
+
+      if(key.includes('docx')){
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.setHeader('Content-Disposition', `attachment; filename=${docName[docName.length-1]}`);
+      }
+
+      
+
       if (typeof response === "string") {
         const ErrorResponse = ResponseWrapperCode.missingItem;
         ErrorResponse.message = response;
@@ -195,6 +231,8 @@ export class S3Controller extends BaseHttpController {
    * @swagger
    * /api/s3/s3ListFilesAndFolders:
    *   get:
+   *     tags:
+   *       - S3
    *     summary: List files and folders from the bucket and the given path
    *     parameters:
    *       - name: objectType
@@ -248,6 +286,8 @@ export class S3Controller extends BaseHttpController {
    * @swagger
    * /api/s3/deleteS3File:
    *   get:
+   *     tags:
+   *       - S3
    *     summary: Get a file from S3
    *     parameters:
    *       - name: key

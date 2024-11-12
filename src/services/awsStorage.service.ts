@@ -13,25 +13,25 @@ import { NodeHttpHandler } from "@aws-sdk/node-http-handler";
 import { Readable, Stream } from "stream";
 import https from "https";
 import { readFileSync } from "fs";
-import * as process from 'process';
+import * as process from "process";
 
-import {streamToString} from "../helpers/streamToStringHelper";
+import { streamToString } from "../helpers/streamToStringHelper";
 import { Config } from "../config/config";
 import { ListOnChainPostsResponseInterface } from "../interfaces/s3.interfaces";
 
-if(!process.env.AWS_ACCESS_KEY_ID){ 
-  throw Error('AWS_ACCESS_KEY_ID missing')
+if (!process.env.AWS_ACCESS_KEY_ID) {
+  throw Error("AWS_ACCESS_KEY_ID missing");
 }
 
-if(!process.env.AWS_SECRET_ACCESS_KEY){ 
-  throw Error('AWS_ACCESS_KEY_ID missing')
+if (!process.env.AWS_SECRET_ACCESS_KEY) {
+  throw Error("AWS_ACCESS_KEY_ID missing");
 }
 
 let agent = new https.Agent({
   rejectUnauthorized: true,
 });
 
-if(process.env.NODE_ENV === 'development'){
+if (process.env.NODE_ENV === "development") {
   const certs = [readFileSync("./Zscaler_Root_CA.pem")];
 
   agent = new https.Agent({
@@ -39,7 +39,6 @@ if(process.env.NODE_ENV === 'development'){
     ca: certs,
   });
 }
-
 
 @injectable()
 export class AwsStorageService {
@@ -87,20 +86,21 @@ export class AwsStorageService {
 
   async getFile(key: string): Promise<GetObjectCommandOutput> {
     try {
-        const getObjectCommand = new GetObjectCommand({
-            Bucket: this.s3Bucket,
-            Key: key,
-        });
+      const getObjectCommand = new GetObjectCommand({
+        Bucket: this.s3Bucket,
+        Key: key,
+      });
 
-        const response: GetObjectCommandOutput = await this.s3.send(getObjectCommand);
-        
-        return response;
+      const response: GetObjectCommandOutput = await this.s3.send(
+        getObjectCommand
+      );
 
+      return response;
     } catch (err: any) {
-        console.error("Error in getFile: ", err);
-        return null
+      console.error("Error in getFile: ", err);
+      return null;
     }
-}
+  }
 
   async deleteFile(key: string): Promise<any> {
     try {
@@ -122,7 +122,6 @@ export class AwsStorageService {
     whatToList: string,
     prefix: string
   ): Promise<string[]> {
-
     try {
       const listObjectsCommand = new ListObjectsV2Command({
         Bucket: this.s3Bucket,
@@ -134,33 +133,31 @@ export class AwsStorageService {
         listObjectsCommand
       );
 
-      if(whatToList === 'files'){
+      if (whatToList === "files") {
         if (response.Contents) {
           const fileList = [];
           response.Contents.forEach((file) => {
-            fileList.push(file.Key)
+            fileList.push(file.Key);
           });
 
-          return fileList
+          return fileList;
         }
 
         return [];
       }
 
-      if(whatToList === 'folders'){
+      if (whatToList === "folders") {
         if (response?.CommonPrefixes) {
-
           const folderList = [];
           response.CommonPrefixes.forEach((folder) => {
-            folderList.push(folder.Prefix)
+            folderList.push(folder.Prefix);
           });
 
-          return folderList
+          return folderList;
         }
 
         return [];
       }
-      
     } catch (err) {
       console.error("Error in listFilesAndFolders: ", err);
       throw new Error(`Unable listFilesAndFolders`);

@@ -7,24 +7,13 @@ import { FileService } from "../services/file.service";
 import { GoogleServices } from "../services/google.services";
 import { PolkassemblyService } from "../services/polkassembly.service";
 import { DotEventsService } from "../services/dotevents.service";
+import { OpenAIService } from "../services/openAI.service";
 import { SchedulerService } from "../services/scheduler.service";
 
 import { PolkassemblyController } from "../controllers/polkassembly.controller";
 import { DotEventsController } from "../controllers/dotevents.controller";
 import { S3Controller } from "../controllers/s3.controller";
-
-if (!process.env.GOOGLE_CLIENT_ID) {
-  throw Error("GOOGLE_CLIENT_ID missing");
-}
-if (!process.env.GOOGLE_CLIENT_SECRET) {
-  throw Error("GOOGLE_CLIENT_SECRET missing");
-}
-if (!process.env.GOOGLE_REDIRECT_URI) {
-  throw Error("GOOGLE_REDIRECT_URI missing");
-}
-if (!process.env.GOOGLE_ACCESS_TOKEN) {
-  throw Error("GOOGLE_ACCESS_TOKEN missing");
-}
+import { OpenAIController } from "../controllers/openAI.controller";
 
 const container = new Container();
 
@@ -35,6 +24,7 @@ container
   .bind<PolkassemblyService>(PolkassemblyService.name)
   .to(PolkassemblyService);
 container.bind<DotEventsService>(DotEventsService.name).to(DotEventsService);
+container.bind<OpenAIService>(OpenAIService.name).to(OpenAIService);
 
 container.bind<SchedulerService>(SchedulerService.name).to(SchedulerService);
 
@@ -46,5 +36,6 @@ container
   .to(DotEventsController);
 
 container.bind<S3Controller>(S3Controller.name).to(S3Controller);
+container.bind<OpenAIController>(OpenAIController.name).to(OpenAIController);
 
 export { container };

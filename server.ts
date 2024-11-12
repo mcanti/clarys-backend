@@ -120,5 +120,9 @@ if (cluster.isPrimary) {
 
   const scheduler = container.get<SchedulerService>(SchedulerService.name);
   // scheduler.updateOnChainPostFolder();
-  scheduler.updateOffChainEventsAndSubEventsPostFolder();
+  // scheduler.updateOffChainDiscussionsPosts();
+  // scheduler.updateOffChainDiscussionsPostFolder();
+  // scheduler.updateOffChainEventsAndSubEventsPostFolder();
+  scheduler.uploadOnChainFilesOpenAI();
+  // scheduler.uploadOffChainFilesOpenAI();
 }

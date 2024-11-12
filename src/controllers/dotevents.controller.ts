@@ -272,6 +272,8 @@ export class DotEventsController extends BaseHttpController {
    * @swagger
    * /api/dotevents/findSubmissionsEvents:
    *   get:
+   *     tags:
+   *       - DotEvents/Monday
    *     summary: List off-chain Submissions Events posts
    *     responses:
    *       200:

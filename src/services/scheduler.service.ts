@@ -380,7 +380,7 @@ export class SchedulerService {
   }
 
   async uploadOnChainFilesOpenAI() {
-    cron.schedule("*/15 * * * *", async () => {
+    cron.schedule("* * * * *", async () => {
       console.log("Running scheduled uploadOnChainFilesOpenAI task...");
 
       try {
@@ -437,7 +437,7 @@ export class SchedulerService {
                           file_id
                         );
                         await this.openAIController._deleteFile(file_id);
-                        await delay(250);
+                        await delay(500);
                       })
                     );
                   }
@@ -533,104 +533,179 @@ export class SchedulerService {
                   );
 
                   const fileIdsToBeDeleted = [];
-                  info.data.map((fileData) => {
+                  for (let i = 0; i < info.data.length; i++) {
                     if (
-                      fileData.filename.includes(
+                      info.data[i].filename.includes(
                         proposalTypeObject[proposalType]
                       )
                     ) {
-                      fileIdsToBeDeleted.push(fileData.id);
+                      fileIdsToBeDeleted.push(info.data[i].id);
                     }
-                  });
+                  }
+
+                  // info.data.map((fileData) => {
+                  //   if (
+                  //     fileData.filename.includes(
+                  //       proposalTypeObject[proposalType]
+                  //     )
+                  //   ) {
+                  //     fileIdsToBeDeleted.push(fileData.id);
+                  //   }
+                  // });
 
                   if (fileIdsToBeDeleted.length > 0) {
-                    await Promise.allSettled(
-                      fileIdsToBeDeleted.map(async (file_id) => {
-                        await this.openAIController._deleteVectorStoreFile(
-                          file_id
-                        );
-                        await this.openAIController._deleteFile(file_id);
-                        await delay(250);
-                      })
-                    );
+                    for (let i = 0; i < fileIdsToBeDeleted.length; i++) {
+                      await this.openAIController._deleteVectorStoreFile(
+                        fileIdsToBeDeleted[i]
+                      );
+                      await this.openAIController._deleteFile(
+                        fileIdsToBeDeleted[i]
+                      );
+                      await delay(500);
+                    }
+                    // await Promise.allSettled(
+                    //   fileIdsToBeDeleted.map(async (file_id) => {
+                    //     await this.openAIController._deleteVectorStoreFile(
+                    //       file_id
+                    //     );
+                    //     await this.openAIController._deleteFile(file_id);
+                    //     await delay(500);
+                    //   })
+                    // );
                   }
 
                   //add files to openAI
-                  result.promises = await Promise.allSettled(
-                    storedList.posts.map(async (post, index) => {
-                      const folderKey = `OnChainPost/${proposalType}/${post.post_id}/`;
+                  for (let i = 0; i < storedList.length; i++) {
+                    const folderKey = `OnChainPost/${proposalType}/${storedList[i].post_id}/`;
 
-                      //json file
+                    //json file
 
-                      //get Json file from S3
-                      const jsonToUpload = await this.s3Controller._s3GetFile(
-                        folderKey + `#${post.post_id}.json`
+                    //get Json file from S3
+                    const jsonToUpload = await this.s3Controller._s3GetFile(
+                      folderKey + `#${storedList[i].post_id}.json`
+                    );
+
+                    //upload new Json file to OpenAI file storage
+                    const openAIFileStorageresponse =
+                      await this.openAIController._uploadFile(
+                        "assistants",
+                        jsonToUpload,
+                        `${proposalTypeObject[proposalType]}-Id${storedList[i].post_id}.json`
+                      );
+                    await delay(1000);
+
+                    console.log(openAIFileStorageresponse.id);
+
+                    await this.openAIController._createVectorStoreFile(
+                      openAIFileStorageresponse.id
+                    );
+                    await delay(1000);
+
+                    const existingDocsList =
+                      await this.s3Controller._s3ListFilesAndFolders(
+                        "folders",
+                        folderKey
                       );
 
-                      //upload new Json file to OpenAI file storage
-                      const openAIFileStorageresponse =
-                        await this.openAIController._uploadFile(
-                          "assistants",
-                          jsonToUpload,
-                          `${proposalTypeObject[proposalType]}-Id${post.post_id}.json`
-                        );
-                      await delay(500);
+                    if (existingDocsList.length > 0) {
+                      for (let j = 0; j < existingDocsList.length; j++) {
+                        const docFiles =
+                          await this.s3Controller._s3ListFilesAndFolders(
+                            "files",
+                            existingDocsList[j]
+                          );
 
-                      await this.openAIController._createVectorStoreFile(
-                        openAIFileStorageresponse.id
-                      );
-                      await delay(250);
+                        if (docFiles.length > 0) {
+                          for (let k = 0; k < existingDocsList.length; k++) {
+                            const docToUpload =
+                              await this.s3Controller._s3GetFile(docFiles[k]);
 
-                      //doc file
-                      const existingDocsList =
-                        await this.s3Controller._s3ListFilesAndFolders(
-                          "folders",
-                          folderKey
-                        );
+                            const docFileIdAndFormat = docFiles[k].split(
+                              `OnChainPost/${proposalType}/${storedList[i].post_id}/docs/`
+                            )[1];
 
-                      if (existingDocsList.length > 0) {
-                        await Promise.allSettled(
-                          existingDocsList.map(async (existingDocs) => {
-                            const docFiles =
-                              await this.s3Controller._s3ListFilesAndFolders(
-                                "files",
-                                existingDocs
+                            const openAIDocFileStorageresponse =
+                              await this.openAIController._uploadFile(
+                                "assistants",
+                                docToUpload,
+                                `${proposalTypeObject[proposalType]}-Id${storedList[i].post_id}-document-Id${docFileIdAndFormat}`
                               );
+                            await delay(1000);
 
-                            if (docFiles.length > 0) {
-                              await Promise.allSettled(
-                                docFiles.map(async (docFileKey) => {
-                                  const docToUpload =
-                                    await this.s3Controller._s3GetFile(
-                                      docFileKey
-                                    );
-
-                                  const docFileIdAndFormat = docFileKey.split(
-                                    `OnChainPost/${proposalType}/${post.post_id}/docs/`
-                                  )[1];
-
-                                  const openAIDocFileStorageresponse =
-                                    await this.openAIController._uploadFile(
-                                      "assistants",
-                                      docToUpload,
-                                      `${proposalTypeObject[proposalType]}-Id${post.post_id}-document-Id${docFileIdAndFormat}`
-                                    );
-                                  await delay(500);
-
-                                  await this.openAIController._createVectorStoreFile(
-                                    openAIDocFileStorageresponse.id
-                                  );
-                                  await delay(250);
-                                })
-                              );
-                            }
-                          })
-                        );
+                            await this.openAIController._createVectorStoreFile(
+                              openAIDocFileStorageresponse.id
+                            );
+                            await delay(1000);
+                          }
+                        }
                       }
-
-                      //
-                    })
-                  );
+                    }
+                  }
+                  // result.promises = await Promise.allSettled(
+                  //   storedList.posts.map(async (post, index) => {
+                  //     // const folderKey = `OnChainPost/${proposalType}/${post.post_id}/`;
+                  //     // //json file
+                  //     // //get Json file from S3
+                  //     // const jsonToUpload = await this.s3Controller._s3GetFile(
+                  //     //   folderKey + `#${post.post_id}.json`
+                  //     // );
+                  //     // //upload new Json file to OpenAI file storage
+                  //     // const openAIFileStorageresponse =
+                  //     //   await this.openAIController._uploadFile(
+                  //     //     "assistants",
+                  //     //     jsonToUpload,
+                  //     //     `${proposalTypeObject[proposalType]}-Id${post.post_id}.json`
+                  //     //   );
+                  //     // await delay(1000);
+                  //     // console.log(openAIFileStorageresponse.id);
+                  //     // await this.openAIController._createVectorStoreFile(
+                  //     //   openAIFileStorageresponse.id
+                  //     // );
+                  //     // await delay(1000);
+                  //     //doc file
+                  //     // const existingDocsList =
+                  //     //   await this.s3Controller._s3ListFilesAndFolders(
+                  //     //     "folders",
+                  //     //     folderKey
+                  //     //   );
+                  //     // if (existingDocsList.length > 0) {
+                  //     //   await Promise.allSettled(
+                  //     //     existingDocsList.map(async (existingDocs) => {
+                  //     //       const docFiles =
+                  //     //         await this.s3Controller._s3ListFilesAndFolders(
+                  //     //           "files",
+                  //     //           existingDocs
+                  //     //         );
+                  //     //       if (docFiles.length > 0) {
+                  //     //         await Promise.allSettled(
+                  //     //           docFiles.map(async (docFileKey) => {
+                  //     //             const docToUpload =
+                  //     //               await this.s3Controller._s3GetFile(
+                  //     //                 docFileKey
+                  //     //               );
+                  //     //             const docFileIdAndFormat = docFileKey.split(
+                  //     //               `OnChainPost/${proposalType}/${post.post_id}/docs/`
+                  //     //             )[1];
+                  //     //             const openAIDocFileStorageresponse =
+                  //     //               await this.openAIController._uploadFile(
+                  //     //                 "assistants",
+                  //     //                 docToUpload,
+                  //     //                 `${proposalTypeObject[proposalType]}-Id${post.post_id}-document-Id${docFileIdAndFormat}`
+                  //     //               );
+                  //     //             await delay(1000);
+                  //     //             await this.openAIController._createVectorStoreFile(
+                  //     //               openAIDocFileStorageresponse.id
+                  //     //             );
+                  //     //             await delay(1000);
+                  //     //           })
+                  //     //         );
+                  //     //       }
+                  //     //     })
+                  //     //   );
+                  //     // }
+                  //     //
+                  //   })
+                  // );
                 }
               }
             }

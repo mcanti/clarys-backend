@@ -14,6 +14,7 @@ import {
   DeleteVectorStoreFileParamsInterface
 } from "../interfaces/openAI.interfaces";
 import { fileToBlob } from "../helpers/jsonConvertor.helper";
+import pino from "pino";
 
 
 if (!process.env.OPENAI_API_KEY) {
@@ -22,6 +23,17 @@ if (!process.env.OPENAI_API_KEY) {
 
 if (!process.env.VECTOR_STORE_ID) {
   throw Error("VECTOR_STORE_ID missing");
+}
+
+const logger = pino(
+  {
+    level: 'info',
+  },
+  pino.destination('logs.json') 
+);
+
+function logResponse(response) {
+  logger.info(response, 'OPEN AI API Response');
 }
 
 @injectable()
@@ -144,6 +156,8 @@ export class OpenAIService {
         }
       );
 
+      logResponse(response);
+
       return response.data;
     } catch (err) {
       console.log("Error - uploadFile: ", err);
@@ -175,9 +189,11 @@ export class OpenAIService {
         }
       );
 
+      console.log("createVectorStoreFileResponse from Service: ", response);
+      logResponse(response);
       return response.data;
     } catch (err) {
-      console.log("Error - uploadFile: ", err);
+      console.log("Error - createVectorStoreFile: ", err);
       return { error: err.response?.data || "An error occurred during the upload." };
     }
   }

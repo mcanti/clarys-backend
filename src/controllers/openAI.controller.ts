@@ -1,6 +1,6 @@
 import { inject } from "inversify";
 import express, { Request, Response } from "express";
-import multer from 'multer';
+import multer from "multer";
 
 import {
   BaseHttpController,
@@ -90,8 +90,7 @@ export class OpenAIController extends BaseHttpController {
 
   async _uploadFile(purpose: string, file: File, filename: string) {
     try {
-        
-    //   const blobFile = jsonToBlob(file);
+      //   const blobFile = jsonToBlob(file);
       const response = await this.openAIService.uploadFile({
         purpose,
         file,
@@ -105,26 +104,30 @@ export class OpenAIController extends BaseHttpController {
     }
   }
 
-  async _createVectorStoreFile(file_id: string){
+  async _createVectorStoreFile(file_id: string) {
     try {
-          const response = await this.openAIService.createVectorStoreFile({file_id});
-    
-          return response;
-        } catch (err) {
-          console.log("Error - _createVectorStoreFile: ", err);
-          throw Error("_createVectorStoreFile failed");
-        }
+      const response = await this.openAIService.createVectorStoreFile({
+        file_id,
+      });
+
+      return response;
+    } catch (err) {
+      console.log("Error - _createVectorStoreFile: ", err);
+      throw Error("_createVectorStoreFile failed");
+    }
   }
 
-  async _deleteVectorStoreFile(file_id: string){
+  async _deleteVectorStoreFile(file_id: string) {
     try {
-          const response = await this.openAIService.deleteVectorStoreFile({file_id});
-    
-          return response;
-        } catch (err) {
-          console.log("Error - _deleteVectorStoreFile: ", err);
-          throw Error("_deleteVectorStoreFile failed");
-        }
+      const response = await this.openAIService.deleteVectorStoreFile({
+        file_id,
+      });
+
+      return response;
+    } catch (err) {
+      console.log("Error - _deleteVectorStoreFile: ", err);
+      throw Error("_deleteVectorStoreFile failed");
+    }
   }
 
   // Exposing API endpoints
@@ -336,7 +339,7 @@ export class OpenAIController extends BaseHttpController {
     try {
       const { purpose, file, filename } = body;
       console.log("purpose purpose", filename);
-      
+
       const result = await this._uploadFile(purpose, file, filename);
 
       res.apiSuccess({
@@ -347,5 +350,4 @@ export class OpenAIController extends BaseHttpController {
       res.apiError(ResponseWrapperCode.generalError);
     }
   }
-
 }

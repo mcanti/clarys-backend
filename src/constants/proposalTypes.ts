@@ -1,8 +1,8 @@
 export const proposalTypeList = [
   "referendums_v2",
-  "bounties",
-  "child_bounties",
-  "tips"
+  // "bounties",
+  // "child_bounties",
+  // "tips"
 ];
 
 export const proposalTypeObject = {

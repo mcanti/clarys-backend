@@ -398,13 +398,12 @@ export class SchedulerService {
   async batchProcess(array, batchSize, callback) {
     for (let i = 0; i < array.length; i += batchSize) {
       const batch = array.slice(i, i + batchSize);
-      
+
       for (const item of batch) {
         await callback(item);
       }
     }
   }
-  
 
   async deleteOldFiles(proposalType, storedList) {
     const info = await this.openAIController._listFiles(
@@ -461,15 +460,18 @@ export class SchedulerService {
   async uploadNewFiles(proposalType, storedList, modifiedPostsIds) {
     for (const post of storedList.posts) {
       // Check if we're uploading all posts or only modified ones
-      if (modifiedPostsIds === null || modifiedPostsIds.includes(post.post_id)) {
+      if (
+        modifiedPostsIds === null ||
+        modifiedPostsIds.includes(post.post_id)
+      ) {
         const folderKey = `OnChainPost/${proposalType}/${post.post_id}/`;
-  
+
         try {
           // Upload JSON file
           const jsonToUpload = await this.s3Controller._s3GetFile(
             folderKey + `#${post.post_id}.json`
           );
-  
+
           const jsonResponse = await this.executeWithBackoff(() =>
             this.openAIController._uploadFile(
               "assistants",
@@ -480,29 +482,32 @@ export class SchedulerService {
           await this.executeWithBackoff(() =>
             this.openAIController._createVectorStoreFile(jsonResponse.id)
           );
-  
+
           // Introduce delay to prevent rate limiting
           await delay(1000);
-  
+
           // Upload document files if any
-          const existingDocsList = await this.s3Controller._s3ListFilesAndFolders(
-            "folders",
-            folderKey
-          );
-  
+          const existingDocsList =
+            await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              folderKey
+            );
+
           for (const existingDocs of existingDocsList) {
             const docFiles = await this.s3Controller._s3ListFilesAndFolders(
               "files",
               existingDocs
             );
-  
+
             for (const docFileKey of docFiles) {
               try {
-                const docToUpload = await this.s3Controller._s3GetFile(docFileKey);
+                const docToUpload = await this.s3Controller._s3GetFile(
+                  docFileKey
+                );
                 const docFileIdAndFormat = docFileKey.split(
                   `OnChainPost/${proposalType}/${post.post_id}/docs/`
                 )[1];
-  
+
                 const docResponse = await this.executeWithBackoff(() =>
                   this.openAIController._uploadFile(
                     "assistants",
@@ -513,76 +518,80 @@ export class SchedulerService {
                 await this.executeWithBackoff(() =>
                   this.openAIController._createVectorStoreFile(docResponse.id)
                 );
-  
+
                 // Delay to manage rate limits between uploads
                 await delay(1000);
               } catch (docError) {
-                console.error(`Error uploading document file for post ID ${post.post_id}:`, docError);
+                console.error(
+                  `Error uploading document file for post ID ${post.post_id}:`,
+                  docError
+                );
               }
             }
           }
         } catch (error) {
-          console.error(`Error uploading files for post ID ${post.post_id}:`, error);
+          console.error(
+            `Error uploading files for post ID ${post.post_id}:`,
+            error
+          );
         }
       }
     }
   }
-  
 
   async uploadOnChainFilesOpenAI() {
-    cron.schedule("* * * * *", async () => {
+    cron.schedule("*/5 * * * *", async () => {
       console.log("Running scheduled uploadOnChainFilesOpenAI task...");
       try {
-        const allPromises = await Promise.allSettled(
-          proposalTypeList.map(async (proposalType) => {
-            const key = `OnChainPosts/${proposalType}/${proposalType}-List.json`;
-            const storedList = await this.s3Controller._s3GetFile(key);
-            const existingPostsFolderList =
-              await this.s3Controller._s3ListFilesAndFolders(
-                "folders",
-                `OnChainPost/${proposalType}/`
-              );
+        for (
+          let proposalTypeIterator = 0;
+          proposalTypeIterator < proposalTypeList.length;
+          proposalTypeIterator++
+        ) {
+          const key = `OnChainPosts/${proposalTypeList[proposalTypeIterator]}/${proposalTypeList[proposalTypeIterator]}-List.json`;
+          const storedList = await this.s3Controller._s3GetFile(key);
+          const existingPostsFolderList =
+            await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              `OnChainPost/${proposalTypeList[proposalTypeIterator]}/`
+            );
 
-            let result = {
-              proposalType,
-              promises: [],
-            };
-
+          if (
+            storedList &&
+            typeof storedList !== "string" &&
+            storedList.posts
+          ) {
+            // Delete and update files if modifiedPostsIds are present
             if (
-              storedList &&
-              typeof storedList !== "string" &&
-              storedList.posts
+              storedList.modifiedPostsIds &&
+              storedList.modifiedPostsIds.length > 0
             ) {
-              // Delete and update files if modifiedPostsIds are present
-              if (
-                storedList.modifiedPostsIds &&
-                storedList.modifiedPostsIds.length > 0
-              ) {
-                await this.deleteOldFiles(proposalType, storedList);
-                result.promises = await this.uploadNewFiles(
-                  proposalType,
-                  storedList,
-                  storedList.modifiedPostsIds
-                );
-              }
-
-              // Initial Run: Delete all and update files
-              if (this.uploadOnChainFilesToOpenAIFirstRun) {
-                this.uploadOnChainFilesToOpenAIFirstRun = false;
-                await this.deleteFilesOnFirstRun(proposalType);
-                result.promises = await this.uploadNewFiles(
-                  proposalType,
-                  storedList,
-                  null
-                );
-              }
+              await this.deleteOldFiles(
+                proposalTypeList[proposalTypeIterator],
+                storedList
+              );
+              await this.uploadNewFiles(
+                proposalTypeList[proposalTypeIterator],
+                storedList,
+                storedList.modifiedPostsIds
+              );
             }
 
-            return result;
-          })
-        );
+            // Initial Run: Delete all and update files
+            if (this.uploadOnChainFilesToOpenAIFirstRun) {
+              this.uploadOnChainFilesToOpenAIFirstRun = false;
+              await this.deleteFilesOnFirstRun(
+                proposalTypeList[proposalTypeIterator]
+              );
+              await this.uploadNewFiles(
+                proposalTypeList[proposalTypeIterator],
+                storedList,
+                null
+              );
+            }
+          }
+        }
 
-        console.log("allPromises: ", allPromises);
         console.log(
           "Scheduled uploadOnChainFilesOpenAI task completed successfully."
         );

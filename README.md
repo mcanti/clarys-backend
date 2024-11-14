@@ -11,7 +11,7 @@ Ensure you have either Docker or Podman installed on your system.
 
 ## Building the Docker Image
 
-1. Clone the Repository:
+1. **Clone the Repository:**
 
 ```bash
 git clone https://github.com/your-username/your-repository.git
@@ -19,15 +19,15 @@ cd your-repository
 
 ```
 
-2. Build the Image:
+2. **Build the Image:**
 
-Using Docker
+**Using Docker**
 
 ```bash
 docker build -t your-image-name .
 ```
 
-Using Podman
+**Using Podman**
 
 ```bash
 podman build -t your-image-name .
@@ -37,17 +37,17 @@ This will create an image named your-image-name based on the configuration in th
 
 ## Running the Container
 
-To run the container, you’ll need to map any required ports and pass environment variables if applicable.
+To run the container, you’ll need to map any required ports and pass environment variables.
 
-1. Run the Container:
+1. **Run the Container:**
 
-Using Docker
+**Using Docker**
 
 ```bash
 docker run --env-file .env -p 3000:3000 your-image-name
 ```
 
-Using Podman
+**Using Podman**
 
 ```bash
 podman run --env-file .env -p 3000:3000 your-image-name
@@ -58,17 +58,16 @@ podman run --env-file .env -p 3000:3000 your-image-name
 
 ## Stopping the Container
 
-
 To stop the running container:
 
-Using Docker
+**Using Docker**
 
 ```bash
 docker stop container_id_or_name
 
 ```
 
-Using Podman
+**Using Podman**
 
 ```bash
 podman stop container_id_or_name
@@ -76,19 +75,17 @@ podman stop container_id_or_name
 
 Use docker ps or podman ps to list running containers and get the container ID or name.
 
-
-
 ## Saving the Image for Distribution
 
 If you want to export the image to a .tar file for sharing:
 
-Using Docker
+**Using Docker**
 
 ```bash
 docker save -o your-image-name.tar your-image-name
 ```
 
-Using Podman
+**Using Podman**
 
 ```bash
 podman save -o your-image-name.tar your-image-name
@@ -100,13 +97,13 @@ This .tar file can then be loaded on another system.
 
 To load the saved image on a new system:
 
-Using Docker
+**Using Docker**
 
 ```bash
 docker load -i your-image-name.tar
 ```
 
-Using Podman
+**Using Podman**
 
 ```bash
 podman load -i your-image-name.tar

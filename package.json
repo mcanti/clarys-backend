@@ -37,6 +37,7 @@
     "path": "^0.12.7",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
+    "sonic-boom": "^4.2.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-dist": "^5.17.14",
     "swagger-ui-express": "^5.0.1"

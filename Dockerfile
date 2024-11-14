@@ -1,20 +1,20 @@
-# Folosește o imagine de bază NodeJS
+# Use a NodeJS base image
 FROM node:18
 
-# Setează directorul de lucru
+# Set the working directory
 WORKDIR /app
 
-# Copiază fișierele package.json și package-lock.json
+# Copy package.json and package-lock.json files
 COPY package*.json ./
 
-# Instalează dependențele
+# Install dependencies
 RUN npm install
 
-# Copiază restul fișierelor aplicației
+# Copy the rest of the application files
 COPY . .
 
-# Expune portul pe care rulează aplicația (de exemplu, 3000)
+# Expose the port the application runs on (e.g., 3000)
 EXPOSE 3000
 
-# Comanda de rulare a aplicației
+# Command to run the application
 CMD ["npm", "run", "devStart"]

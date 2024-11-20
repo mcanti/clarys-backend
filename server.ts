@@ -123,6 +123,6 @@ if (cluster.isPrimary) {
   // scheduler.updateOffChainDiscussionsPosts();
   // scheduler.updateOffChainDiscussionsPostFolder();
   // scheduler.updateOffChainEventsAndSubEventsPostFolder();
-  scheduler.uploadOnChainFilesOpenAI();
+  // scheduler.uploadOnChainFilesOpenAI();
   // scheduler.uploadOffChainFilesOpenAI();
 }

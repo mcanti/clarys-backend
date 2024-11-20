@@ -11,6 +11,8 @@ import {
   DeleteFileParamsInterface,
   UploadFileBodyParamsInterface,
   AddFileToVectorStoreBodyParamsInterface,
+  AddFilesBatchToVectorStoreBodyParamsInterface,
+  ListVectorStoreFilesParamsInterface,
   DeleteVectorStoreFileParamsInterface,
 } from "../interfaces/openAI.interfaces";
 import { fileToBlob } from "../helpers/jsonConvertor.helper";
@@ -50,27 +52,32 @@ export class OpenAIService {
       const axiosInstance = axios.create({
         timeout: 300000, // 5-minute timeout
       });
-  
-      const response = await axiosInstance.get("https://api.openai.com/v1/files", {
-        params: params,
-        maxBodyLength: Infinity,
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-        },
-        httpsAgent: new https.Agent({
-          rejectUnauthorized: process.env.NODE_ENV !== 'production',
-        }),
-      });
-  
+
+      const response = await axiosInstance.get(
+        "https://api.openai.com/v1/files",
+        {
+          params: params,
+          maxBodyLength: Infinity,
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          httpsAgent: new https.Agent({
+            rejectUnauthorized: process.env.NODE_ENV !== "production",
+          }),
+        }
+      );
+
       return response.data ?? response;
     } catch (err) {
       logResponse(err);
       return {
-        error: err.response?.data || "An error occurred during the listFiles request.",
+        error:
+          err.response?.data ||
+          "An error occurred during the listFiles request.",
         statusCode: err.response?.status,
       };
     }
-  }  
+  }
 
   async getFile(params: GetFileParamsInterface) {
     try {
@@ -119,7 +126,7 @@ export class OpenAIService {
       const axiosInstance = axios.create({
         timeout: 300000, // 5-minute timeout
       });
-  
+
       const response = await axiosInstance.delete(
         `https://api.openai.com/v1/files/${params.file_id}`,
         {
@@ -127,36 +134,36 @@ export class OpenAIService {
             Authorization: `Bearer ${this.apiKey}`,
           },
           httpsAgent: new https.Agent({
-            rejectUnauthorized: process.env.NODE_ENV !== 'production',
+            rejectUnauthorized: process.env.NODE_ENV !== "production",
           }),
         }
       );
-  
-      if(response && response?.data){
+
+      if (response && response?.data) {
         return response.data;
       }
 
       return response;
     } catch (err) {
-      logResponse(err);
+      // logResponse(err);
       return {
         error: err.response?.data || "An error occurred during the deleteFile.",
         statusCode: err.response?.status,
       };
     }
   }
-  
+
   async uploadFile(params: UploadFileBodyParamsInterface) {
     try {
       const formData = new FormData();
       const blobFile = fileToBlob(params.file);
       formData.append("file", blobFile, params.filename);
       formData.append("purpose", params.purpose);
-  
+
       const axiosInstance = axios.create({
         timeout: 300000, // 5-minute timeout for large file uploads
       });
-  
+
       const response = await axiosInstance.post(
         "https://api.openai.com/v1/files",
         formData,
@@ -167,25 +174,28 @@ export class OpenAIService {
           },
           httpsAgent: new https.Agent({
             keepAlive: true,
-            rejectUnauthorized: process.env.NODE_ENV !== 'production',
+            rejectUnauthorized: process.env.NODE_ENV !== "production",
           }),
         }
       );
 
-      if(response && response?.data){
+      if (response && response?.data) {
         return response.data;
       }
-  
+
       return response;
     } catch (err) {
-      logResponse(err);
+      logResponse({
+        error: err.response?.data || "An error occurred during the upload.",
+        statusCode: err.response?.status || "No Status",
+      });
       return {
         error: err.response?.data || "An error occurred during the upload.",
         statusCode: err.response?.status,
       };
     }
   }
-  
+
   async createVectorStoreFile(params: AddFileToVectorStoreBodyParamsInterface) {
     try {
       const axiosInstance = axios.create({
@@ -214,11 +224,89 @@ export class OpenAIService {
 
       return response;
     } catch (err) {
-      logResponse(err);
+      // logResponse(err);
       return {
         error:
           err.response?.data ||
           "An error occurred during the createVectorStoreFile.",
+        statusCode: err.response?.status,
+      };
+    }
+  }
+
+  async createVectorStoreFilesBatch(
+    params: AddFilesBatchToVectorStoreBodyParamsInterface
+  ) {
+    try {
+      const axiosInstance = axios.create({
+        timeout: 300000, // 5-minute timeout
+      });
+
+      const response = await axiosInstance.post(
+        `https://api.openai.com/v1/vector_stores/${this.vectorStoreId}/file_batches`,
+        { ...params },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
+            "OpenAI-Beta": "assistants=v2",
+          },
+          httpsAgent: new https.Agent({
+            keepAlive: true,
+            rejectUnauthorized: process.env.NODE_ENV !== "production",
+          }),
+        }
+      );
+
+      if (response && response?.data) {
+        return response.data;
+      }
+
+      return response;
+    } catch (err) {
+      logResponse(err);
+      return {
+        error:
+          err.response?.data ||
+          "An error occurred during the createVectorStoreFilesBatch.",
+        statusCode: err.response?.status,
+      };
+    }
+  }
+
+  async listVectorStoreFiles(params: ListVectorStoreFilesParamsInterface){
+    try {
+      const axiosInstance = axios.create({
+        timeout: 300000, // 5-minute timeout
+      });
+
+      const response = await axiosInstance.get(
+        ` https://api.openai.com/v1/vector_stores/${this.vectorStoreId}/files`,
+        {
+          params: params,
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
+            "OpenAI-Beta": "assistants=v2",
+          },
+          httpsAgent: new https.Agent({
+            keepAlive: true,
+            rejectUnauthorized: process.env.NODE_ENV !== "production",
+          }),
+        }
+      );
+
+      if (response && response?.data) {
+        return response.data;
+      }
+
+      return response;
+    } catch (err) {
+      logResponse(err);
+      return {
+        error:
+          err.response?.data ||
+          "An error occurred during the listVectorStoreFiles.",
         statusCode: err.response?.status,
       };
     }

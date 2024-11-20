@@ -95,7 +95,7 @@ export class OpenAIController extends BaseHttpController {
       return response;
     } catch (err) {
       console.log("Error - _uploadFile: ", err);
-      throw new Error(`_uploadFile failed: ${err.message || 'Unknown error'}`);
+      throw new Error(`_uploadFile failed: ${err.message || "Unknown error"}`);
     }
   }
 
@@ -107,9 +107,50 @@ export class OpenAIController extends BaseHttpController {
       return response;
     } catch (err) {
       console.log("Error - _createVectorStoreFile: ", err);
-      throw new Error(`_createVectorStoreFile failed: ${err.message || 'Unknown error'}`);
+      throw new Error(
+        `_createVectorStoreFile failed: ${err.message || "Unknown error"}`
+      );
     }
-  } 
+  }
+
+  async _createVectorStoreFilesBatch(file_ids: string[]) {
+    try {
+      const response = await this.openAIService.createVectorStoreFilesBatch({
+        file_ids,
+      });
+      return response;
+    } catch (err) {
+      console.log("Error - _createVectorStoreFilesBatch: ", err);
+      throw new Error(
+        `_createVectorStoreFilesBatch failed: ${err.message || "Unknown error"}`
+      );
+    }
+  }
+
+  async _listVectorStoreFiles(
+    limit: number,
+    order?: string,
+    after?: string,
+    before?: string,
+    filter?: string
+  ) {
+    try {
+      const response = await this.openAIService.listVectorStoreFiles({
+        limit,
+        order,
+        after,
+        before,
+        filter,
+      });
+
+      return response;
+    } catch (err) {
+      console.log("Error - _listVectorStoreFiles: ", err);
+      throw new Error(
+        `_listVectorStoreFiles failed: ${err.message || "Unknown error"}`
+      );
+    }
+  }
 
   async _deleteVectorStoreFile(file_id: string) {
     try {
@@ -119,7 +160,9 @@ export class OpenAIController extends BaseHttpController {
       return response;
     } catch (err) {
       console.log("Error - _deleteVectorStoreFile: ", err);
-      throw new Error(`_deleteVectorStoreFile failed: ${err.message || 'Unknown error'}`);
+      throw new Error(
+        `_deleteVectorStoreFile failed: ${err.message || "Unknown error"}`
+      );
     }
   }
 

@@ -28,6 +28,18 @@ export interface AddFileToVectorStoreBodyParamsInterface {
     chunking_strategy?: object
 }
 
+export interface AddFilesBatchToVectorStoreBodyParamsInterface {
+    file_ids: string[]
+}
+
+export interface ListVectorStoreFilesParamsInterface {
+    limit: number,
+    order?: string,
+    after?: string,
+    before?: string,
+    filter?: string
+}
+
 export interface DeleteVectorStoreFileParamsInterface{
     file_id: string,
 }

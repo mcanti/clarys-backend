@@ -159,7 +159,7 @@ export class AwsStorageService {
         return [];
       }
     } catch (err) {
-      console.error("Error in listFilesAndFolders: ", err);
+      // console.error("Error in listFilesAndFolders: ", err);
       throw new Error(`Unable listFilesAndFolders`);
     }
   }

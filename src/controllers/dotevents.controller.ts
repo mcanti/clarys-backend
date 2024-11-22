@@ -10,11 +10,6 @@ import {
 } from "inversify-express-utils";
 
 import { DotEventsService } from "../services/dotevents.service";
-import {
-  polkassemblySchemaPost,
-  polkassemblySchemaPostByAddress,
-  polkassemblySchemaPostsList,
-} from "../schemas/polkassembly.schema";
 import { AwsStorageService } from "../services/awsStorage.service";
 import { ResponseWrapperCode } from "../services/responseWrapper.service";
 import { validateSchema } from "../middleware/validator.middleware";
@@ -81,34 +76,6 @@ export class DotEventsController extends BaseHttpController {
           events: eventsList,
           subEvents: subEventsList,
         };
-
-        // const bufferEvents = Buffer.from(
-        //   JSON.stringify({
-        //     count: result.events.length,
-        //     posts: result.events,
-        //   })
-        // );
-
-        // const uploadedEventsFileToS3 =
-        //   await this.awsStorageService.uploadFilesToS3(
-        //     bufferEvents,
-        //     `${folder}/events-List.json`,
-        //     "application/json"
-        //   );
-
-        // const bufferSubevents = Buffer.from(
-        //   JSON.stringify({
-        //     count: result.subEvents.length,
-        //     posts: result.subEvents,
-        //   })
-        // );
-
-        // const uploadedSubeventsFileToS3 =
-        //   await this.awsStorageService.uploadFilesToS3(
-        //     bufferSubevents,
-        //     `${folder}/subevents-List.json`,
-        //     "application/json"
-        //   );
       }
 
 

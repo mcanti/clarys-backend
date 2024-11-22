@@ -27,13 +27,13 @@ import {
   findFiledId,
   findGoogleDocsLinks,
 } from "../helpers/googleDocsLinksFinder.helper";
+import { findGoogleDriveDocsLinks } from "../helpers/googleDriveDocsLinksFinder.helper";
 
 import {
   CategoriesList,
   CategoriesAndTags,
   CategoriesForKeyword,
 } from "../constants/postCategories";
-// import { tagsCategories } from "../constants/tagsCategory";
 import { S3Controller } from "./s3.controller";
 import { containsSubstring } from "../helpers/categories.helper";
 
@@ -41,13 +41,14 @@ import { containsSubstring } from "../helpers/categories.helper";
 export class PolkassemblyController extends BaseHttpController {
   private readonly filePath: string;
 
+  //config inject awsStorageService or fileService
   constructor(
     @inject("PolkassemblyService")
     private polkassemblyService: PolkassemblyService,
     @inject("AwsStorageService") private awsStorageService: AwsStorageService,
+    @inject("FileService") private fileService: FileService,
     @inject("S3Controller") private s3Controller: S3Controller,
-    @inject("GoogleServices") private googleService: GoogleServices,
-    @inject("FileService") private fileService: FileService
+    @inject("GoogleServices") private googleService: GoogleServices
   ) {
     super();
   }
@@ -63,7 +64,13 @@ export class PolkassemblyController extends BaseHttpController {
         postId,
       });
 
-      const googleDocsLinks = findGoogleDocsLinks(response.content);
+      let googleDocsLinks = [];
+      let googleDriveLinks = [];
+
+      if (response?.content) {
+        googleDocsLinks = findGoogleDocsLinks(response.content);
+        googleDriveLinks = findGoogleDriveDocsLinks(response.content);
+      }
 
       const filesIds = [];
       googleDocsLinks.forEach((googleDocUrl) => {
@@ -83,6 +90,22 @@ export class PolkassemblyController extends BaseHttpController {
         );
       }
 
+      if (response?.comments) {
+        delete response.comments;
+      }
+
+      if (response?.post_reactions) {
+        delete response.post_reactions;
+      }
+
+      if (response?.proposed_call) {
+        delete response.proposed_call;
+      }
+
+      if (response?.profile) {
+        delete response.profile;
+      }
+
       const buffer = Buffer.from(JSON.stringify(response));
 
       const result = await this.awsStorageService.uploadFilesToS3(
@@ -90,6 +113,8 @@ export class PolkassemblyController extends BaseHttpController {
         `${folder}/#${postId}.json`,
         "application/json"
       );
+
+      // await this.fileService.saveDataToFile(`${folder}/#${postId}.json`,response);
 
       return result;
     } catch (err) {
@@ -157,6 +182,26 @@ export class PolkassemblyController extends BaseHttpController {
           );
 
           if (responseBatch.posts && responseBatch.posts.length) {
+            responseBatch.posts.forEach((post) => {
+              if (post?.post_reactions) {
+                delete post.post_reactions;
+              }
+              if (post?.content) {
+                delete post.content;
+              }
+              if (post?.comments_count) {
+                delete post.comments_count;
+              }
+              if (post?.proposalHashBlock) {
+                delete post.proposalHashBlock;
+              }
+              if (post?.spam_users_count) {
+                delete post.spam_users_count;
+              }
+              if (post?.track_no) {
+                delete post.track_no;
+              }
+            });
             allPosts = [...allPosts, ...responseBatch.posts];
           }
         }
@@ -185,10 +230,7 @@ export class PolkassemblyController extends BaseHttpController {
           categories.push(post.topic.name);
         }
 
-        if (
-          post?.type &&
-          CategoriesList.includes(post.type)
-        ) {
+        if (post?.type && CategoriesList.includes(post.type)) {
           categories.push(post.type);
         }
 
@@ -234,6 +276,12 @@ export class PolkassemblyController extends BaseHttpController {
           `${folder}/${proposalType}-List.json`,
           "application/json"
         );
+
+        await this.fileService.saveDataToFile(`${proposalType}-List.json`, {
+          modifiedPostsIds: [],
+          count: postsWithCategories.length,
+          posts: postsWithCategories,
+        });
       } else {
         if (storedList?.posts) {
           storedList.posts.forEach((post) => {
@@ -273,6 +321,12 @@ export class PolkassemblyController extends BaseHttpController {
               `${folder}/${proposalType}-List.json`,
               "application/json"
             );
+
+            await this.fileService.saveDataToFile(`${proposalType}-List.json`, {
+              modifiedPostsIds: modifiedPostsIds,
+              count: postsWithCategories.length,
+              posts: postsWithCategories,
+            });
           }
         }
       }
@@ -327,8 +381,6 @@ export class PolkassemblyController extends BaseHttpController {
 
       const googleDocsLinks = findGoogleDocsLinks(response.content);
 
-      console.log("googleDocsLinks", googleDocsLinks);
-
       const filesIds = [];
       googleDocsLinks.forEach((googleDocUrl) => {
         const fieldId = findFiledId(googleDocUrl);
@@ -364,9 +416,7 @@ export class PolkassemblyController extends BaseHttpController {
     }
   }
 
-  async _findOffChainPosts(
-    proposalType: string,
-  ) {
+  async _findOffChainPosts(proposalType: string) {
     try {
       const folder = `OffChainPosts/${proposalType}`;
       const fileName = `${proposalType}-List.json`;
@@ -383,15 +433,20 @@ export class PolkassemblyController extends BaseHttpController {
         const totalPages = Math.ceil(response.count / limit);
 
         for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
-          const responseBatch = await this.polkassemblyService.ListOffChainPosts(
-            {
+          const responseBatch =
+            await this.polkassemblyService.ListOffChainPosts({
               proposalType,
               page: pageNumber,
               listingLimit: limit,
-            }
-          );
+            });
 
           if (responseBatch.posts && responseBatch.posts.length) {
+            responseBatch.posts.forEach((post) => {
+              if (post?.post_reactions) {
+                delete post.post_reactions;
+              }
+            });
+
             allPosts = [...allPosts, ...responseBatch.posts];
           }
         }
@@ -420,10 +475,7 @@ export class PolkassemblyController extends BaseHttpController {
           categories.push(post.topic.name);
         }
 
-        if (
-          post?.type &&
-          CategoriesList.includes(post.type)
-        ) {
+        if (post?.type && CategoriesList.includes(post.type)) {
           categories.push(post.type);
         }
 
@@ -437,7 +489,7 @@ export class PolkassemblyController extends BaseHttpController {
 
         postsWithCategories.push({
           ...post,
-          categories: [...categories, 'Discussions'],
+          categories: [...categories, "Discussions"],
         });
       });
 
@@ -469,6 +521,15 @@ export class PolkassemblyController extends BaseHttpController {
           `${folder}/${proposalType}-List.json`,
           "application/json"
         );
+
+        await this.fileService.saveDataToFile(
+          `${folder}/${proposalType}-List.json`,
+          {
+            modifiedPostsIds: [],
+            count: postsWithCategories.length,
+            posts: postsWithCategories,
+          }
+        );
       }
 
       return {
@@ -485,8 +546,6 @@ export class PolkassemblyController extends BaseHttpController {
       throw Error("_findOnChainPosts failed");
     }
   }
-
-
 
   // Exposing API endpoints
 
@@ -691,7 +750,7 @@ export class PolkassemblyController extends BaseHttpController {
 
   //OffChain
 
-    /**
+  /**
    * @swagger
    * /api/polkassembly/findOffChainPost:
    *   get:
@@ -719,24 +778,23 @@ export class PolkassemblyController extends BaseHttpController {
    *       500:
    *         description: Internal server error
    */
-    @httpGet("/findOffChainPost", validateSchema(polkassemblySchemaOffChainPost))
-    async findOffChainPost(
-      @response() res: Response,
-      @queryParam("proposalType") proposalType: string,
-      @queryParam("postId") postId: number
-    ) {
-      try {
-        const result = await this._findOffChainPost(proposalType, postId);
-  
-        res.apiSuccess({
-          ...result,
-        });
-      } catch (err) {
-        console.log("Error - findOffChainPost: ", err);
-        res.apiError(ResponseWrapperCode.generalError);
-      }
+  @httpGet("/findOffChainPost", validateSchema(polkassemblySchemaOffChainPost))
+  async findOffChainPost(
+    @response() res: Response,
+    @queryParam("proposalType") proposalType: string,
+    @queryParam("postId") postId: number
+  ) {
+    try {
+      const result = await this._findOffChainPost(proposalType, postId);
+
+      res.apiSuccess({
+        ...result,
+      });
+    } catch (err) {
+      console.log("Error - findOffChainPost: ", err);
+      res.apiError(ResponseWrapperCode.generalError);
     }
-  
+  }
 
   /**
    * @swagger
@@ -760,15 +818,16 @@ export class PolkassemblyController extends BaseHttpController {
    *       500:
    *         description: Internal server error
    */
-  @httpGet("/findOffChainPosts", validateSchema(polkassemblySchemaOffChainPostsList))
+  @httpGet(
+    "/findOffChainPosts",
+    validateSchema(polkassemblySchemaOffChainPostsList)
+  )
   async findOffChainPosts(
     @response() res: Response,
-    @queryParam("proposalType") proposalType: string,
+    @queryParam("proposalType") proposalType: string
   ) {
     try {
-      const result = await this._findOffChainPosts(
-        proposalType,
-      );
+      const result = await this._findOffChainPosts(proposalType);
 
       res.apiSuccess({
         ...result,
@@ -778,5 +837,4 @@ export class PolkassemblyController extends BaseHttpController {
       res.apiError(ResponseWrapperCode.generalError);
     }
   }
-
 }

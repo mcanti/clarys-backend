@@ -3,7 +3,9 @@ import { google, drive_v3 } from "googleapis";
 import { Stream } from "stream";
 import { GoogleAPIConfigInterface } from "../interfaces/google.interfaces";
 import { AwsStorageService } from "./awsStorage.service";
+import { FileService } from "./file.service";
 import axios from "axios";
+import * as cheerio from "cheerio";
 
 import { readFileSync } from "fs";
 import https from "https";
@@ -26,10 +28,9 @@ export class GoogleServices {
   private drive: drive_v3.Drive;
 
   constructor(
-    @inject("AwsStorageService") private awsStorageService: AwsStorageService
-  ) {
-    
-  }
+    @inject("AwsStorageService") private awsStorageService: AwsStorageService,
+    @inject("FileService") private fileService: FileService
+  ) {}
 
   private async streamToBuffer(stream: Stream): Promise<Buffer> {
     const chunks: Uint8Array[] = [];
@@ -67,9 +68,93 @@ export class GoogleServices {
         "application/docx"
       );
 
-      console.log(`File from Google Docs uploaded to S3`);
+      // await this.fileService.saveDataToFile(
+      //   `${folderDocs}/${fileId}.docx`,
+      //   bufferDoc,
+      //   true
+      // );
+
     } catch (error) {
       console.error("Error uploading file:", error);
     }
   }
+
+  async scrapeGoogleDriveFolder(url: string): Promise<{ name: string; downloadUrl: string }[]> {
+    try {
+      const response = await axios.get(url);
+      const $ = cheerio.load(response.data);
+  
+      const files: { name: string; downloadUrl: string }[] = [];
+  
+      // Parse file links
+      $("a").each((_, el) => {
+        const link = $(el).attr("href");
+        const text = $(el).text();
+  
+        if (link && link.includes("drive.google.com")) {
+          files.push({
+            name: text.trim(),
+            downloadUrl: link,
+          });
+        }
+      });
+  
+      return files;
+    } catch (error) {
+      console.error("Error scraping Google Drive folder:", error);
+      return [];
+    }
+  }
+  
+  async downloadFile(fileUrl: string): Promise<Buffer> {
+    try {
+      const response = await axios.get(fileUrl, {
+        responseType: "stream",
+        httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      });
+  
+      const fileStream = new Stream.PassThrough();
+      response.data.pipe(fileStream);
+  
+      return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = [];
+        fileStream.on("data", (chunk) => chunks.push(chunk));
+        fileStream.on("end", () => resolve(Buffer.concat(chunks)));
+        fileStream.on("error", reject);
+      });
+    } catch (error) {
+      console.error("Error downloading file:", error);
+      throw error;
+    }
+  }
+  
+  async processGoogleDriveFolder(folderUrl: string, s3FolderPath: string): Promise<void> {
+    try{
+
+      const files = await this.scrapeGoogleDriveFolder(folderUrl);
+  
+      for (const file of files) {
+        if (file.downloadUrl.includes("/folders/")) {
+          // If it's a folder, process recursively
+          console.log(`Processing subfolder: ${file.name}`);
+          await this.processGoogleDriveFolder(file.downloadUrl, `${s3FolderPath}/${file.name}`);
+        } else {
+          // Download and upload file
+          console.log(`Processing file: ${file.name}`);
+          const fileBuffer = await this.downloadFile(file.downloadUrl);
+
+          await this.awsStorageService.uploadFilesToS3(
+            fileBuffer,
+            `${s3FolderPath}/${file.name}.docx`,
+            "application/octet-stream"
+          );
+        }
+      }
+
+    }catch (error) {
+      console.error("Error processGoogleDriveFolder:", error);
+    }
+   
+  }
+  
 }

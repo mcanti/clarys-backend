@@ -2,9 +2,12 @@ import { injectable, inject } from "inversify";
 import cron from "node-cron";
 
 import { AwsStorageService } from "../services/awsStorage.service";
+import { FileService } from "../services/file.service";
 import { GoogleServices } from "../services/google.services";
 
 import { PolkassemblyController } from "../controllers/polkassembly.controller";
+import { DotEventsController } from "../controllers/dotevents.controller";
+import { DotMeetUpsController } from "../controllers/dotMeetUps.controller";
 import { S3Controller } from "../controllers/s3.controller";
 import { OpenAIController } from "../controllers/openAI.controller";
 
@@ -32,9 +35,14 @@ export class SchedulerService {
 
   constructor(
     @inject("AwsStorageService") private awsStorageService: AwsStorageService,
+    @inject("FileService") private fileService: FileService,
     @inject("GoogleServices") private googleService: GoogleServices,
     @inject("PolkassemblyController")
     private polkassemblyController: PolkassemblyController,
+    @inject("DotEventsController")
+    private dotEventsController: DotEventsController,
+    @inject("DotMeetUpsController")
+    private dotMeetUpsController: DotMeetUpsController,
     @inject("S3Controller") private s3Controller: S3Controller,
     @inject("OpenAIController") private openAIController: OpenAIController
   ) {
@@ -42,10 +50,11 @@ export class SchedulerService {
   }
 
   async updateOnChainPosts() {
-    cron.schedule("*/30 * * * *", async () => {
-      console.log("Running scheduled task...");
+    // cron.schedule("*/30 * * * *", async () => {
+    console.log("Running scheduled task...");
 
-      try {
+    try {
+      await Promise.allSettled(
         proposalTypeList.map(async (proposalType) => {
           await this.polkassemblyController._findOnChainPosts(
             proposalType,
@@ -53,333 +62,642 @@ export class SchedulerService {
             "newest"
           );
           console.log(`Updated ${proposalType}-List`);
-        });
+        })
+      );
 
-        console.log("Scheduled task completed successfully.");
-      } catch (err) {
-        console.log("Error executing scheduled task:", err);
-        throw Error("Error executing scheduled task");
-      }
-    });
+      console.log("Scheduled task completed successfully.");
+    } catch (err) {
+      console.log("Error executing scheduled task:", err);
+      throw Error("Error executing scheduled task");
+    }
+    // });
   }
 
   async updateOffChainDiscussionsPosts() {
-    cron.schedule("* * * * *", async () => {
-      console.log("Running scheduled updateOffChainDiscussionsPosts task...");
+    // cron.schedule("* * * * *", async () => {
+    console.log("Running scheduled updateOffChainDiscussionsPosts task...");
 
-      try {
+    try {
+      await Promise.allSettled(
         offChainPolkassemblyTypeList.map(async (proposalType) => {
           await this.polkassemblyController._findOffChainPosts(proposalType);
 
           console.log(`Updated ${proposalType}-List`);
-        });
+        })
+      );
 
-        console.log(
-          "Scheduled updateOffChainDiscussionsPosts task completed successfully."
-        );
-      } catch (err) {
-        console.log(
-          "Error executing scheduled updateOffChainDiscussionsPosts task:",
-          err
-        );
-        throw Error(
-          "Error executing scheduled updateOffChainDiscussionsPosts task"
-        );
-      }
-    });
+      console.log(
+        "Scheduled updateOffChainDiscussionsPosts task completed successfully."
+      );
+    } catch (err) {
+      console.log(
+        "Error executing scheduled updateOffChainDiscussionsPosts task:",
+        err
+      );
+      throw Error(
+        "Error executing scheduled updateOffChainDiscussionsPosts task"
+      );
+    }
+    // });
+  }
+
+  async updateOffChainEventsPosts() {
+    // cron.schedule("*/30 * * * *", async () => {
+    console.log("Running scheduled task...");
+
+    try {
+      await this.dotEventsController._findSubmissionsEvents();
+
+      console.log(
+        "Scheduled task updateOffChainEventsPosts completed successfully."
+      );
+    } catch (err) {
+      console.log(
+        "Error executing scheduled updateOffChainEventsPosts task:",
+        err
+      );
+      throw Error("Error executing scheduled updateOffChainEventsPosts task");
+    }
+    // });
+  }
+
+  async updateOffChainMeetUpEventsPosts() {
+    // cron.schedule("*/30 * * * *", async () => {
+    console.log("Running scheduled task...");
+
+    try {
+      await this.dotMeetUpsController._findMeetUpEvents();
+
+      console.log(
+        "Scheduled task updateOffChainMeetUpEventsPosts completed successfully."
+      );
+    } catch (err) {
+      console.log(
+        "Error executing scheduled updateOffChainMeetUpEventsPosts task:",
+        err
+      );
+      throw Error("Error executing scheduled updateOffChainMeetUpEventsPosts task");
+    }
+    // });
   }
 
   async updateOnChainPostFolder() {
-    cron.schedule("*/5 * * * *", async () => {
-      console.log("Running scheduled task...");
+    // cron.schedule("*/5 * * * *", async () => {
+    console.log("Running scheduled task...");
 
-      try {
-        const allPromises = await Promise.allSettled(
-          proposalTypeList.map(async (proposalType) => {
-            const key = `OnChainPosts/${proposalType}/${proposalType}-List.json`;
+    try {
+      const allPromises = await Promise.allSettled(
+        proposalTypeList.map(async (proposalType) => {
+          const key = `OnChainPosts/${proposalType}/${proposalType}-List.json`;
 
-            const storedList = await this.s3Controller._s3GetFile(key);
-            const existingPostsFolderList =
-              await this.s3Controller._s3ListFilesAndFolders(
-                "folders",
-                `OnChainPost/${proposalType}/`
-              );
+          const storedList = await this.s3Controller._s3GetFile(key);
+          const existingPostsFolderList =
+            await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              `OnChainPost/${proposalType}/`
+            );
 
-            let result = {
-              proposalType: proposalType,
-              promises: [],
-            };
-
-            if (storedList != null && typeof storedList != "string") {
-              if (storedList?.posts) {
-                if (existingPostsFolderList.length === 0) {
-                  result.promises = await Promise.allSettled(
-                    storedList.posts.map(async (post) => {
-                      await this.polkassemblyController._findOnChainPost(
-                        proposalType,
-                        post.post_id
-                      );
-                    })
-                  );
-                } else if (
-                  storedList?.modifiedPostsIds &&
-                  storedList.modifiedPostsIds.length > 0
-                ) {
-                  result.promises = await Promise.all(
-                    storedList.modifiedPostsIds.map(async (id) => {
-                      await this.polkassemblyController._findOnChainPost(
-                        proposalType,
-                        id
-                      );
-                    })
-                  );
-                }
+          if (storedList != null && typeof storedList != "string") {
+            if (storedList?.posts) {
+              if (
+                existingPostsFolderList === null ||
+                (existingPostsFolderList &&
+                  existingPostsFolderList.length === 0)
+              ) {
+                return await Promise.allSettled(
+                  storedList.posts.map(async (post) => {
+                    await this.polkassemblyController._findOnChainPost(
+                      proposalType,
+                      post.post_id
+                    );
+                  })
+                );
+              } else if (
+                storedList?.modifiedPostsIds &&
+                storedList.modifiedPostsIds.length > 0
+              ) {
+                return await Promise.allSettled(
+                  storedList.modifiedPostsIds.map(async (id) => {
+                    await this.polkassemblyController._findOnChainPost(
+                      proposalType,
+                      id
+                    );
+                  })
+                );
               }
             }
+          }
+        })
+      );
 
-            return result;
-          })
-        );
+      console.log("allPromises: ", allPromises);
 
-        console.log("allPromises: ", allPromises);
-
-        console.log(
-          "Scheduled updateOnChainPostFolder task completed successfully."
-        );
-      } catch (err) {
-        console.log(
-          "Error executing scheduled updateOnChainPostFolder task:",
-          err
-        );
-        throw Error("Error executing scheduled updateOnChainPostFolder task");
-      }
-    });
+      console.log(
+        "Scheduled updateOnChainPostFolder task completed successfully."
+      );
+    } catch (err) {
+      console.log(
+        "Error executing scheduled updateOnChainPostFolder task:",
+        err
+      );
+      throw Error("Error executing scheduled updateOnChainPostFolder task");
+    }
+    // });
   }
 
   async updateOffChainDiscussionsPostFolder() {
-    cron.schedule("* * * * *", async () => {
-      console.log("Running scheduled task...");
+    // cron.schedule("* * * * *", async () => {
+    console.log("Running scheduled task...");
 
-      try {
-        const allPromises = await Promise.allSettled(
-          offChainPolkassemblyTypeList.map(async (proposalType) => {
-            const key = `OffChainPosts/${proposalType}/${proposalType}-List.json`;
+    try {
+      const allPromises = await Promise.allSettled(
+        offChainPolkassemblyTypeList.map(async (proposalType) => {
+          const key = `OffChainPosts/${proposalType}/${proposalType}-List.json`;
 
-            const storedList = await this.s3Controller._s3GetFile(key);
-            const existingPostsFolderList =
-              await this.s3Controller._s3ListFilesAndFolders(
-                "folders",
-                `OffChainPost/${proposalType}/`
-              );
+          const storedList = await this.s3Controller._s3GetFile(key);
+          const existingPostsFolderList =
+            await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              `OffChainPost/${proposalType}/`
+            );
 
-            let result = {
-              proposalType: proposalType,
-              promises: [],
-            };
+          console.log(storedList?.count);
 
-            if (storedList != null && typeof storedList != "string") {
-              if (storedList?.posts) {
-                if (existingPostsFolderList.length === 0) {
-                  result.promises = await Promise.allSettled(
-                    storedList.posts.map(async (post) => {
-                      await this.polkassemblyController._findOffChainPost(
-                        proposalType,
-                        post.post_id
-                      );
-                    })
-                  );
-                } else if (
-                  storedList?.modifiedPostsIds &&
-                  storedList.modifiedPostsIds.length > 0
-                ) {
-                  result.promises = await Promise.all(
-                    storedList.modifiedPostsIds.map(async (id) => {
-                      await this.polkassemblyController._findOnChainPost(
-                        proposalType,
-                        id
-                      );
-                    })
-                  );
-                }
+          if (storedList != null && typeof storedList != "string") {
+            if (storedList?.posts) {
+              if (
+                existingPostsFolderList === null ||
+                (existingPostsFolderList &&
+                  existingPostsFolderList.length === 0)
+              ) {
+                return await Promise.allSettled(
+                  storedList.posts.map(async (post, index) => {
+                    await this.polkassemblyController._findOffChainPost(
+                      proposalType,
+                      post.post_id
+                    );
+                    if (index === storedList.posts.length - 1) {
+                      console.log("last item");
+                    }
+                  })
+                );
+              } else if (
+                storedList?.modifiedPostsIds &&
+                storedList.modifiedPostsIds.length > 0
+              ) {
+                return await Promise.allSettled(
+                  storedList.modifiedPostsIds.map(async (id) => {
+                    await this.polkassemblyController._findOffChainPost(
+                      proposalType,
+                      id
+                    );
+                  })
+                );
               }
             }
+          }
+        })
+      );
 
-            return result;
-          })
-        );
+      console.log("allPromises: ", allPromises);
 
-        console.log("allPromises: ", allPromises);
-
-        console.log(
-          "Scheduled updateOffChainDiscussionsPostFolder task completed successfully."
-        );
-      } catch (err) {
-        console.log(
-          "Error executing scheduled updateOffChainDiscussionsPostFolder task:",
-          err
-        );
-        throw Error(
-          "Error executing scheduled updateOffChainDiscussionsPostFolder task"
-        );
-      }
-    });
+      console.log(
+        "Scheduled updateOffChainDiscussionsPostFolder task completed successfully."
+      );
+    } catch (err) {
+      console.log(
+        "Error executing scheduled updateOffChainDiscussionsPostFolder task:",
+        err
+      );
+      throw Error(
+        "Error executing scheduled updateOffChainDiscussionsPostFolder task"
+      );
+    }
+    // });
   }
 
   async updateOffChainEventsAndSubEventsPostFolder() {
-    cron.schedule("* * * * *", async () => {
-      console.log(
-        "Running scheduled updateOffChainEventsAndSubEventsPostFolder task ..."
-      );
+    // cron.schedule("* * * * *", async () => {
+    console.log(
+      "Running scheduled updateOffChainEventsAndSubEventsPostFolder task ..."
+    );
 
-      try {
-        const proposalType = "events";
+    try {
+      const proposalType = "events";
 
-        const allPromises = await Promise.allSettled(
-          eventsTypeList.map(async (eventType) => {
-            const key = `OffChainPosts/${proposalType}/${eventType}-List.json`;
-            let folder = `OffChainPost/${proposalType}/${eventType}/`;
-            let folderDocs = `OffChainPost/${proposalType}/${eventType}/`;
+      const allPromises = await Promise.allSettled(
+        eventsTypeList.map(async (eventType) => {
+          const key = `OffChainPosts/${proposalType}/${eventType}-List.json`;
+          let folder = `OffChainPost/${proposalType}/${eventType}/`;
+          let folderDocs = `OffChainPost/${proposalType}/${eventType}/`;
 
-            const storedList = await this.s3Controller._s3GetFile(key);
+          const storedList = await this.s3Controller._s3GetFile(key);
 
-            const existingEventsPostsFolderList =
-              await this.s3Controller._s3ListFilesAndFolders(
-                "folders",
-                `OffChainPost/events/`
-              );
+          const existingEventsPostsFolderList =
+            await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              `OffChainPost/events/`
+            );
 
-            let result = {
-              proposalType: proposalType,
-              eventType: eventType,
-              promises: [],
-            };
+          if (storedList != null && typeof storedList != "string") {
+            if (storedList?.posts) {
+              if (
+                existingEventsPostsFolderList === null ||
+                (existingEventsPostsFolderList &&
+                  existingEventsPostsFolderList.length === 0)
+              ) {
+                return await Promise.allSettled(
+                  storedList.posts.map(async (post) => {
+                    let splitUrls = [];
 
-            if (storedList != null && typeof storedList != "string") {
-              if (storedList?.posts) {
-                if (existingEventsPostsFolderList.length === 0) {
-                  result.promises = await Promise.allSettled(
-                    storedList.posts.map(async (post) => {
-                      let splitUrls = [];
+                    if (
+                      eventType === "events" &&
+                      post?.column_values &&
+                      post.column_values?.google_doc__1 &&
+                      post.column_values.google_doc__1?.url &&
+                      post.column_values.google_doc__1.url.length > 0
+                    ) {
+                      splitUrls = post.column_values.google_doc__1.url
+                        .split("https")
+                        .filter((part) => part !== "");
+                    }
 
-                      if (
-                        eventType === "events" &&
+                    if (
+                      eventType === "subEvents" &&
+                      post?.column_values &&
+                      post.column_values?.link__1 &&
+                      post.column_values.link__1?.url &&
+                      post.column_values.link__1.url.length > 0
+                    ) {
+                      splitUrls = post.column_values.link__1.url
+                        .split("https")
+                        .filter((part) => part !== "");
+                    }
+
+                    // filter for saving docx files
+                    if (
+                      (eventType === "events" &&
                         post?.column_values &&
-                        post.column_values?.google_doc__1 &&
-                        post.column_values.google_doc__1?.url &&
-                        post.column_values.google_doc__1.url.length > 0
-                      ) {
-                        splitUrls = post.column_values.google_doc__1.url
-                          .split("https")
-                          .filter((part) => part !== "");
-                      }
-
-                      if (
-                        eventType === "subEvents" &&
+                        post.column_values?.status_1__1 &&
+                        post.column_values.status_1__1?.index &&
+                        (post.column_values.status_1__1.index === 1 ||
+                          post.column_values.status_1__1.index === 2 ||
+                          post.column_values.status_1__1.index === 7)) ||
+                      (eventType === "subEvents" &&
                         post?.column_values &&
-                        post.column_values?.link__1 &&
-                        post.column_values.link__1?.url &&
-                        post.column_values.link__1.url.length > 0
-                      ) {
-                        splitUrls = post.column_values.link__1.url
-                          .split("https")
-                          .filter((part) => part !== "");
-                      }
-
-                      // filter for saving docx files
-                      if (
-                        (eventType === "events" &&
-                          post?.column_values &&
-                          post.column_values?.status_1__1 &&
-                          post.column_values.status_1__1?.index &&
-                          (post.column_values.status_1__1.index === 1 ||
-                            post.column_values.status_1__1.index === 2)) ||
-                        (eventType === "subEvents" &&
-                          post?.column_values &&
-                          post.column_values?.status &&
-                          post.column_values.status?.index &&
-                          post.column_values.status.index === 6)
-                      ) {
-                        const filesIds = [];
-                        splitUrls.forEach((googleDocUrl) => {
-                          const fieldId = findFiledId(`https${googleDocUrl}`);
-                          if (!fieldId) {
-                            console.log("Invalid Google Docs URL provided.");
-                          } else {
-                            filesIds.push(fieldId);
-                          }
-                        });
-
-                        let folderDocsFile = folderDocs + `${post.id}/docs`;
-
-                        if (filesIds.length) {
-                          await Promise.all(
-                            filesIds.map(async (fileId) => {
-                              await this.googleService.uploadGoogleDocToS3(
-                                fileId,
-                                folderDocsFile
-                              );
-                            })
-                          );
+                        post.column_values?.status &&
+                        post.column_values.status?.index &&
+                        post.column_values.status.index === 6)
+                    ) {
+                      const filesIds = [];
+                      splitUrls.forEach((googleDocUrl) => {
+                        const fieldId = findFiledId(`https${googleDocUrl}`);
+                        if (!fieldId) {
+                          console.log("Invalid Google Docs URL provided.");
+                        } else {
+                          filesIds.push(fieldId);
                         }
-                      } else {
-                        let folderDocsJson = folderDocs + `${post.id}/docs`;
-                        const completeUrls = [];
+                      });
 
-                        splitUrls.forEach((googleDocUrl) => {
-                          completeUrls.push(`https${googleDocUrl}`);
-                        });
+                      let folderDocsFile = folderDocs + `${post.id}/docs`;
 
-                        const data = {
-                          urls: [completeUrls],
-                        };
-
-                        const buffer = Buffer.from(JSON.stringify(post));
-                        await this.awsStorageService.uploadFilesToS3(
-                          buffer,
-                          `${folderDocsJson}/docs_urls.json`,
-                          "application/json"
+                      if (filesIds.length) {
+                        await Promise.all(
+                          filesIds.map(async (fileId) => {
+                            await this.googleService.uploadGoogleDocToS3(
+                              fileId,
+                              folderDocsFile
+                            );
+                          })
                         );
                       }
+                    } else {
+                      let folderDocsJson = folderDocs + `${post.id}/docs`;
+                      const completeUrls = [];
 
-                      const buffer = Buffer.from(JSON.stringify(post));
-                      let folderJson = folder + `${post.id}`;
-                      const result =
-                        await this.awsStorageService.uploadFilesToS3(
-                          buffer,
-                          `${folderJson}/#${post.id}.json`,
-                          "application/json"
+                      splitUrls.forEach((googleDocUrl) => {
+                        completeUrls.push(`https${googleDocUrl}`);
+                      });
+
+                      const data = {
+                        urls: [completeUrls],
+                      };
+
+                      const buffer = Buffer.from(JSON.stringify(data));
+                      await this.awsStorageService.uploadFilesToS3(
+                        buffer,
+                        `${folderDocsJson}/docs_urls.json`,
+                        "application/json"
+                      );
+
+                      await this.fileService.saveDataToFile(
+                        `${folderDocsJson}/docs_urls.json`,
+                        data
+                      );
+                    }
+
+                    const buffer = Buffer.from(JSON.stringify(post));
+                    let folderJson = folder + `${post.id}`;
+                    const result = await this.awsStorageService.uploadFilesToS3(
+                      buffer,
+                      `${folderJson}/#${post.id}.json`,
+                      "application/json"
+                    );
+
+                    await this.fileService.saveDataToFile(
+                      `${folderJson}/#${post.id}.json`,
+                      post
+                    );
+                  })
+                );
+              } else if (
+                storedList?.modifiedPostsIds &&
+                storedList.modifiedPostsIds.length > 0
+              ) {
+                return await Promise.allSettled(
+                  storedList.modifiedPostsIds.map(async (id) => {
+                    let splitUrls = [];
+
+                    const post = storedList.posts.filter(
+                      (post) => post.id === id
+                    )[0];
+
+                    if (
+                      eventType === "events" &&
+                      post?.column_values &&
+                      post.column_values?.google_doc__1 &&
+                      post.column_values.google_doc__1?.url &&
+                      post.column_values.google_doc__1.url.length > 0
+                    ) {
+                      splitUrls = post.column_values.google_doc__1.url
+                        .split("https")
+                        .filter((part) => part !== "");
+                    }
+
+                    if (
+                      eventType === "subEvents" &&
+                      post?.column_values &&
+                      post.column_values?.link__1 &&
+                      post.column_values.link__1?.url &&
+                      post.column_values.link__1.url.length > 0
+                    ) {
+                      splitUrls = post.column_values.link__1.url
+                        .split("https")
+                        .filter((part) => part !== "");
+                    }
+
+                    // filter for saving docx files
+                    if (
+                      (eventType === "events" &&
+                        post?.column_values &&
+                        post.column_values?.status_1__1 &&
+                        post.column_values.status_1__1?.index &&
+                        (post.column_values.status_1__1.index === 1 ||
+                          post.column_values.status_1__1.index === 2 ||
+                          post.column_values.status_1__1.index === 7)) ||
+                      (eventType === "subEvents" &&
+                        post?.column_values &&
+                        post.column_values?.status &&
+                        post.column_values.status?.index &&
+                        post.column_values.status.index === 6)
+                    ) {
+                      const filesIds = [];
+                      splitUrls.forEach((googleDocUrl) => {
+                        const fieldId = findFiledId(`https${googleDocUrl}`);
+                        if (!fieldId) {
+                          console.log("Invalid Google Docs URL provided.");
+                        } else {
+                          filesIds.push(fieldId);
+                        }
+                      });
+
+                      let folderDocsFile = folderDocs + `${post.id}/docs`;
+
+                      if (filesIds.length) {
+                        await Promise.all(
+                          filesIds.map(async (fileId) => {
+                            await this.googleService.uploadGoogleDocToS3(
+                              fileId,
+                              folderDocsFile
+                            );
+                          })
                         );
-                    })
-                  );
-                } else if (
-                  storedList?.modifiedPostsIds &&
-                  storedList.modifiedPostsIds.length > 0
-                ) {
-                  console.log("testing");
-                }
+                      }
+                    } else {
+                      let folderDocsJson = folderDocs + `${post.id}/docs`;
+                      const completeUrls = [];
+
+                      splitUrls.forEach((googleDocUrl) => {
+                        completeUrls.push(`https${googleDocUrl}`);
+                      });
+
+                      const data = {
+                        urls: [completeUrls],
+                      };
+
+                      const buffer = Buffer.from(JSON.stringify(data));
+                      await this.awsStorageService.uploadFilesToS3(
+                        buffer,
+                        `${folderDocsJson}/docs_urls.json`,
+                        "application/json"
+                      );
+
+                      await this.fileService.saveDataToFile(
+                        `${folderDocsJson}/docs_urls.json`,
+                        data
+                      );
+                    }
+
+                    const buffer = Buffer.from(JSON.stringify(post));
+                    let folderJson = folder + `${post.id}`;
+                    const result = await this.awsStorageService.uploadFilesToS3(
+                      buffer,
+                      `${folderJson}/#${post.id}.json`,
+                      "application/json"
+                    );
+
+                    await this.fileService.saveDataToFile(
+                      `${folderJson}/#${post.id}.json`,
+                      post
+                    );
+                  })
+                );
               }
             }
+          }
+        })
+      );
 
-            return result;
-          })
-        );
+      console.log("allPromises: ", allPromises);
 
-        console.log("allPromises: ", allPromises);
-
-        console.log(
-          "Scheduled task updateOffChainEventsAndSubEventsPostFolder completed successfully."
-        );
-      } catch (err) {
-        console.log(
-          "Error executing scheduled updateOffChainEventsAndSubEventsPostFolder task:",
-          err
-        );
-        throw Error(
-          "Error executing scheduled updateOffChainEventsAndSubEventsPostFolder task"
-        );
-      }
-    });
+      console.log(
+        "Scheduled task updateOffChainEventsAndSubEventsPostFolder completed successfully."
+      );
+    } catch (err) {
+      console.log(
+        "Error executing scheduled updateOffChainEventsAndSubEventsPostFolder task:",
+        err
+      );
+      throw Error(
+        "Error executing scheduled updateOffChainEventsAndSubEventsPostFolder task"
+      );
+    }
+    // });
   }
+
+  async updateOffChainMeetUpEventsPostFolder() {
+    // cron.schedule("* * * * *", async () => {
+    console.log(
+      "Running scheduled updateOffChainEventsAndSubEventsPostFolder task ..."
+    );
+
+    try {
+      const proposalType = "meetups";
+
+      const key = `OffChainPosts/${proposalType}/meetups-List.json`;
+      let folder = `OffChainPost/${proposalType}/`;
+      let folderDocs = `OffChainPost/${proposalType}/`;
+
+      const storedList = await this.s3Controller._s3GetFile(key);
+
+      const existingMeetUpsEventsPostsFolderList =
+        await this.s3Controller._s3ListFilesAndFolders(
+          "folders",
+          `OffChainPost/${proposalType}/`
+        );
+
+      if (storedList != null && typeof storedList != "string") {
+        if (storedList?.posts) {
+          if (
+            existingMeetUpsEventsPostsFolderList === null ||
+            (existingMeetUpsEventsPostsFolderList &&
+              existingMeetUpsEventsPostsFolderList.length === 0)
+          ) {
+            return await Promise.allSettled(
+              storedList.posts.map(async (post) => {
+                const splitUrls = [];
+
+                if (post?.proposalFolderlLink) {
+                  const proposalLinks = post.newProposaFolderlLink
+                    .split("https")
+                    .filter((part) => part !== "");
+
+                  proposalLinks.forEach((link) => {
+                    splitUrls.push(`https${link}`);
+                  });
+                }
+
+                if (post?.reportFolderLink) {
+                  const reportLinks = post.newProposaFolderlLink
+                    .split("https")
+                    .filter((part) => part !== "");
+
+                  reportLinks.forEach((link) => {
+                    splitUrls.push(`https${link}`);
+                  });
+                }
+
+                const docsLinks = splitUrls.map((url) => {
+                  return findGoogleDocsLinks(url)[0];
+                });
+
+                const filesIds = [];
+                docsLinks.forEach((googleDocUrl) => {
+                  const fieldId = findFiledId(googleDocUrl);
+                  if (!fieldId) {
+                    console.log("Invalid Google Docs URL provided.");
+                  } else {
+                    filesIds.push(fieldId);
+                  }
+                });
+
+                //saving files
+                const savingFilesStatuses = [
+                  "Accepted",
+                  "Child Bounty awarded",
+                  "Rejected",
+                  "Cancelled",
+                  "Child Bounty added",
+                ];
+
+                if (savingFilesStatuses.includes(post.status)) {
+                  let folderDocsFile = folderDocs + `${post.id}/docs`;
+
+                  if (filesIds.length) {
+                    await Promise.all(
+                      filesIds.map(async (fileId) => {
+                        await this.googleService.uploadGoogleDocToS3(
+                          fileId,
+                          folderDocsFile
+                        );
+                      })
+                    );
+                  }
+                } else {
+                  let folderDocsJson = folderDocs + `${post.id}/docs`;
+                  const completeUrls = [];
+
+                  splitUrls.forEach((googleDocUrl) => {
+                    completeUrls.push(`https${googleDocUrl}`);
+                  });
+
+                  const data = {
+                    urls: [completeUrls],
+                  };
+
+                  const buffer = Buffer.from(JSON.stringify(data));
+                  await this.awsStorageService.uploadFilesToS3(
+                    buffer,
+                    `${folderDocsJson}/docs_urls.json`,
+                    "application/json"
+                  );
+
+                  await this.fileService.saveDataToFile(
+                    `${folderDocsJson}/docs_urls.json`,
+                    data
+                  );
+                }
+
+                const buffer = Buffer.from(JSON.stringify(post));
+
+                let folderJson = folder + `${post.id}`;
+                await this.awsStorageService.uploadFilesToS3(
+                  buffer,
+                  `${folderJson}/#${post.id}.json`,
+                  "application/json"
+                );
+
+                // await this.fileService.saveDataToFile(
+                //   `${folderJson}/#${post.id}.json`,
+                //   post
+                // );
+              })
+            );
+          } else if (
+            storedList?.modifiedPostsIds &&
+            storedList.modifiedPostsIds.length > 0
+          ) {
+            //
+          }
+        }
+      }
+
+      console.log(
+        "Scheduled task updateOffChainEventsAndSubEventsPostFolder completed successfully."
+      );
+    } catch (err) {
+      console.log(
+        "Error executing scheduled updateOffChainEventsAndSubEventsPostFolder task:",
+        err
+      );
+      throw Error(
+        "Error executing scheduled updateOffChainEventsAndSubEventsPostFolder task"
+      );
+    }
+    // });
+  }
+
+  //OPEN AI
 
   async executeWithBackoff(asyncFunc, maxRetries = 5, baseDelay = 350) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -574,110 +892,116 @@ export class SchedulerService {
 
   async uploadOnChainFilesOpenAI() {
     cron.schedule("0 * * * *", async () => {
-    console.log("Running scheduled uploadOnChainFilesOpenAI task...");
-    const startTime = Date.now();
-    console.log(
-      `uploadOnChainFilesOpenAI started at ${new Date(startTime).toISOString()}`
-    );
+      console.log("Running scheduled uploadOnChainFilesOpenAI task...");
+      const startTime = Date.now();
+      console.log(
+        `uploadOnChainFilesOpenAI started at ${new Date(
+          startTime
+        ).toISOString()}`
+      );
 
-    try {
-      for (
-        let proposalTypeIterator = 0;
-        proposalTypeIterator < proposalTypeList.length;
-        proposalTypeIterator++
-      ) {
-        const key = `OnChainPosts/${proposalTypeList[proposalTypeIterator]}/${proposalTypeList[proposalTypeIterator]}-List.json`;
-        const storedList = await this.s3Controller._s3GetFile(key);
-        const existingPostsFolderList =
-          await this.s3Controller._s3ListFilesAndFolders(
-            "folders",
-            `OnChainPost/${proposalTypeList[proposalTypeIterator]}/`
-          );
+      try {
+        for (
+          let proposalTypeIterator = 0;
+          proposalTypeIterator < proposalTypeList.length;
+          proposalTypeIterator++
+        ) {
+          const key = `OnChainPosts/${proposalTypeList[proposalTypeIterator]}/${proposalTypeList[proposalTypeIterator]}-List.json`;
+          const storedList = await this.s3Controller._s3GetFile(key);
+          const existingPostsFolderList =
+            await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              `OnChainPost/${proposalTypeList[proposalTypeIterator]}/`
+            );
 
-        if (storedList && typeof storedList !== "string" && storedList.posts) {
-          // Update files if modifiedPostsIds are present
           if (
-            storedList.modifiedPostsIds &&
-            storedList.modifiedPostsIds.length > 0
+            storedList &&
+            typeof storedList !== "string" &&
+            storedList.posts
           ) {
-            const { listOfJsonFiles, listOfDocxFiles } = await this.uploadNewFiles(
-              proposalTypeList[proposalTypeIterator],
-              storedList,
-              storedList.modifiedPostsIds
-            );
-            console.log(
-              `Fiished Uploading files to storage,${listOfJsonFiles.length} json files and ${listOfDocxFiles} docx files`
-            );
-            console.log("Loading files in vector storage ...");
-            await this.uploadToVectorStoreInBatch(listOfJsonFiles);
-            await this.uploadToVectorStoreInBatch(listOfDocxFiles);
-          }
-
-          // Initial Run: Update all files
-          if (this.firstRun) {
-
-            const { listOfJsonFiles, listOfDocxFiles } =
-              await this.uploadNewFiles(
-                proposalTypeList[proposalTypeIterator],
-                storedList,
-                null
-              );
-
-            console.log(
-              `Fiished Uploading files to storage,${listOfJsonFiles.length} json files and ${listOfDocxFiles.length} docx files`
-            );
-            console.log("Loading files in vector storage ...");
-
-            // Process lists in chunks
-            const maxLengthArray = 490;
-            for (
-              let listOfJsonFilesIndex = 0;
-              listOfJsonFilesIndex < listOfJsonFiles.length;
-              listOfJsonFilesIndex += maxLengthArray
+            // Update files if modifiedPostsIds are present
+            if (
+              storedList.modifiedPostsIds &&
+              storedList.modifiedPostsIds.length > 0
             ) {
-              const chunk = listOfJsonFiles.slice(
-                listOfJsonFilesIndex,
-                listOfJsonFilesIndex + maxLengthArray
+              const { listOfJsonFiles, listOfDocxFiles } =
+                await this.uploadNewFiles(
+                  proposalTypeList[proposalTypeIterator],
+                  storedList,
+                  storedList.modifiedPostsIds
+                );
+              console.log(
+                `Fiished Uploading files to storage,${listOfJsonFiles.length} json files and ${listOfDocxFiles} docx files`
               );
-              await this.uploadToVectorStoreInBatch(chunk);
+              console.log("Loading files in vector storage ...");
+              await this.uploadToVectorStoreInBatch(listOfJsonFiles);
+              await this.uploadToVectorStoreInBatch(listOfDocxFiles);
             }
 
-            for (
-              let listOfJsonFilesIndex = 0;
-              listOfJsonFilesIndex < listOfDocxFiles.length;
-              listOfJsonFilesIndex += maxLengthArray
-            ) {
-              const chunk = listOfJsonFiles.slice(
-                listOfJsonFilesIndex,
-                listOfJsonFilesIndex + maxLengthArray
-              );
-              await this.uploadToVectorStoreInBatch(chunk);
-            }
+            // Initial Run: Update all files
+            if (this.firstRun) {
+              const { listOfJsonFiles, listOfDocxFiles } =
+                await this.uploadNewFiles(
+                  proposalTypeList[proposalTypeIterator],
+                  storedList,
+                  null
+                );
 
-            const endTime = Date.now();
-            const deltaTime = endTime - startTime;
-            console.log(
-              `uploadOnChainFilesOpenAI ended  at ${new Date(
-                endTime
-              ).toISOString()}`
-            );
-            console.log(`uploadOnChainFilesOpenAI took ${deltaTime} ms`);
+              console.log(
+                `Fiished Uploading files to storage,${listOfJsonFiles.length} json files and ${listOfDocxFiles.length} docx files`
+              );
+              console.log("Loading files in vector storage ...");
+
+              // Process lists in chunks
+              const maxLengthArray = 490;
+              for (
+                let listOfJsonFilesIndex = 0;
+                listOfJsonFilesIndex < listOfJsonFiles.length;
+                listOfJsonFilesIndex += maxLengthArray
+              ) {
+                const chunk = listOfJsonFiles.slice(
+                  listOfJsonFilesIndex,
+                  listOfJsonFilesIndex + maxLengthArray
+                );
+                await this.uploadToVectorStoreInBatch(chunk);
+              }
+
+              for (
+                let listOfJsonFilesIndex = 0;
+                listOfJsonFilesIndex < listOfDocxFiles.length;
+                listOfJsonFilesIndex += maxLengthArray
+              ) {
+                const chunk = listOfJsonFiles.slice(
+                  listOfJsonFilesIndex,
+                  listOfJsonFilesIndex + maxLengthArray
+                );
+                await this.uploadToVectorStoreInBatch(chunk);
+              }
+
+              const endTime = Date.now();
+              const deltaTime = endTime - startTime;
+              console.log(
+                `uploadOnChainFilesOpenAI ended  at ${new Date(
+                  endTime
+                ).toISOString()}`
+              );
+              console.log(`uploadOnChainFilesOpenAI took ${deltaTime} ms`);
+            }
           }
         }
-      }
 
-      console.log(
-        "Scheduled uploadOnChainFilesOpenAI task completed successfully."
-      );
-    } catch (err) {
-      console.log(
-        "Error executing scheduled uploadOnChainFilesOpenAI task:",
-        err
-      );
-      throw new Error(
-        "Error executing scheduled uploadOnChainFilesOpenAI task"
-      );
-    }
+        console.log(
+          "Scheduled uploadOnChainFilesOpenAI task completed successfully."
+        );
+      } catch (err) {
+        console.log(
+          "Error executing scheduled uploadOnChainFilesOpenAI task:",
+          err
+        );
+        throw new Error(
+          "Error executing scheduled uploadOnChainFilesOpenAI task"
+        );
+      }
     });
   }
 
@@ -1200,152 +1524,173 @@ export class SchedulerService {
   //   });
   // }
 
-//////
+  //////
 
-async handleModifiedFiles(proposalType: string, storedList: any) {
-  console.log(`Handling modified files for ${proposalType}...`);
-  const fileIdsToBeDeleted = await this.getFileIdsToDelete(proposalType, storedList.modifiedPostsIds);
-
-  if (fileIdsToBeDeleted.length > 0) {
-    await this.deleteFilesFromOpenAI(fileIdsToBeDeleted);
-  }
-
-  await this.uploadNewFiles(proposalType, storedList, storedList.modifiedPostsIds);
-}
-
-async processEventFiles(proposalType: string, eventsType: string) {
-  const key = `OffChainPosts/${proposalType}/${eventsType}-List.json`;
-  const storedList = await this.s3Controller._s3GetFile(key);
-  const existingPostsFolderList = await this.s3Controller._s3ListFilesAndFolders(
-    "folders",
-    `OffChainPost/${proposalType}/${eventsType}/`
-  );
-
-  if (storedList && typeof storedList !== "string" && storedList.posts) {
-    if (existingPostsFolderList.length === 0) {
-      console.log("Nothing to update for events", eventsType);
-    } else if (storedList.modifiedPostsIds?.length > 0) {
-      await this.handleModifiedFilesForEvents(proposalType, eventsType, storedList);
-    } else {
-      await this.handleAllFilesForEvents(proposalType, eventsType, storedList);
-    }
-  }
-}
-
-async deleteFilesFromOpenAI(fileIds: string[]) {
-  console.log(`Deleting ${fileIds.length} files from OpenAI...`);
-  await Promise.allSettled(
-    fileIds.map(async (fileId) => {
-      await this.openAIController._deleteVectorStoreFile(fileId);
-      await this.openAIController._deleteFile(fileId);
-      await delay(250);
-    })
-  );
-}
-
-async getFileIdsToDelete(proposalType: string, modifiedPostsIds: string[] | null) {
-  const info = await this.openAIController._listFiles(
-    "assistants",
-    undefined,
-    "desc",
-    undefined
-  );
-
-  const fileIdsToBeDeleted: string[] = [];
-  for (const fileData of info.data) {
-    if (modifiedPostsIds) {
-      if (
-        modifiedPostsIds.some((postId) =>
-          fileData.filename.includes(`${proposalTypeObject[proposalType]}-Id${postId}`)
-        )
-      ) {
-        fileIdsToBeDeleted.push(fileData.id);
-      }
-    } else {
-      if (fileData.filename.includes(proposalTypeObject[proposalType])) {
-        fileIdsToBeDeleted.push(fileData.id);
-      }
-    }
-  }
-
-  return fileIdsToBeDeleted;
-}
-
-async handleAllFiles(proposalType: string, storedList: any) {
-  console.log(`Handling all files for ${proposalType}...`);
-  const fileIdsToBeDeleted = await this.getFileIdsToDelete(proposalType, null);
-
-  if (fileIdsToBeDeleted.length > 0) {
-    await this.deleteFilesFromOpenAI(fileIdsToBeDeleted);
-  }
-
-  await this.uploadNewFiles(proposalType, storedList, null);
-}
-
-
-
-
-
-// private async uploadNewFiles(
-//   proposalType: string,
-//   storedList: any,
-//   postIds: string[] | null
-// ) {
-//   console.log("Uploading new files to OpenAI...");
-//   // Logic for uploading files based on `storedList` and `postIds`.
-// }
-
-async uploadOffChainFilesOpenAI() {
-  cron.schedule("* * * * *", async () => {
-    console.log("Running scheduled uploadOffChainFilesOpenAI task...");
-    const startTime = Date.now();
-    console.log(
-      `uploadOffChainFilesOpenAI started at ${new Date(startTime).toISOString()}`
+  async handleModifiedFiles(proposalType: string, storedList: any) {
+    console.log(`Handling modified files for ${proposalType}...`);
+    const fileIdsToBeDeleted = await this.getFileIdsToDelete(
+      proposalType,
+      storedList.modifiedPostsIds
     );
 
-    try {
-      for (const proposalType of offChainTypeList) {
-        const key = proposalType !== "events" 
-          ? `OffChainPosts/${proposalType}/${proposalType}-List.json` 
-          : null;
+    if (fileIdsToBeDeleted.length > 0) {
+      await this.deleteFilesFromOpenAI(fileIdsToBeDeleted);
+    }
 
-        if (!key) {
-          for (const eventsType of eventsTypeList) {
-            await this.processEventFiles(proposalType, eventsType);
-          }
-          continue;
+    await this.uploadNewFiles(
+      proposalType,
+      storedList,
+      storedList.modifiedPostsIds
+    );
+  }
+
+  async processEventFiles(proposalType: string, eventsType: string) {
+    const key = `OffChainPosts/${proposalType}/${eventsType}-List.json`;
+    const storedList = await this.s3Controller._s3GetFile(key);
+    const existingPostsFolderList =
+      await this.s3Controller._s3ListFilesAndFolders(
+        "folders",
+        `OffChainPost/${proposalType}/${eventsType}/`
+      );
+
+    if (storedList && typeof storedList !== "string" && storedList.posts) {
+      if (existingPostsFolderList.length === 0) {
+        console.log("Nothing to update for events", eventsType);
+      } else if (storedList.modifiedPostsIds?.length > 0) {
+        // await this.handleModifiedFiles(proposalType, eventsType, storedList);
+      } else {
+        // await this.handleAllFiles(proposalType, eventsType, storedList);
+      }
+    }
+  }
+
+  async deleteFilesFromOpenAI(fileIds: string[]) {
+    console.log(`Deleting ${fileIds.length} files from OpenAI...`);
+    await Promise.allSettled(
+      fileIds.map(async (fileId) => {
+        await this.openAIController._deleteVectorStoreFile(fileId);
+        await this.openAIController._deleteFile(fileId);
+        await delay(250);
+      })
+    );
+  }
+
+  async getFileIdsToDelete(
+    proposalType: string,
+    modifiedPostsIds: string[] | null
+  ) {
+    const info = await this.openAIController._listFiles(
+      "assistants",
+      undefined,
+      "desc",
+      undefined
+    );
+
+    const fileIdsToBeDeleted: string[] = [];
+    for (const fileData of info.data) {
+      if (modifiedPostsIds) {
+        if (
+          modifiedPostsIds.some((postId) =>
+            fileData.filename.includes(
+              `${proposalTypeObject[proposalType]}-Id${postId}`
+            )
+          )
+        ) {
+          fileIdsToBeDeleted.push(fileData.id);
         }
+      } else {
+        if (fileData.filename.includes(proposalTypeObject[proposalType])) {
+          fileIdsToBeDeleted.push(fileData.id);
+        }
+      }
+    }
 
-        const storedList = await this.s3Controller._s3GetFile(key);
-        const existingPostsFolderList = await this.s3Controller._s3ListFilesAndFolders(
-          "folders",
-          `OffChainPost/${proposalType}/`
-        );
+    return fileIdsToBeDeleted;
+  }
 
-        if (storedList && typeof storedList !== "string" && storedList.posts) {
-          if (existingPostsFolderList.length === 0) {
-            console.log("Nothing to update for", proposalType);
-          } else {
-            if (storedList.modifiedPostsIds?.length > 0) {
-              await this.handleModifiedFiles(proposalType, storedList);
+  async handleAllFiles(proposalType: string, storedList: any) {
+    console.log(`Handling all files for ${proposalType}...`);
+    const fileIdsToBeDeleted = await this.getFileIdsToDelete(
+      proposalType,
+      null
+    );
+
+    if (fileIdsToBeDeleted.length > 0) {
+      await this.deleteFilesFromOpenAI(fileIdsToBeDeleted);
+    }
+
+    await this.uploadNewFiles(proposalType, storedList, null);
+  }
+
+  // private async uploadNewFiles(
+  //   proposalType: string,
+  //   storedList: any,
+  //   postIds: string[] | null
+  // ) {
+  //   console.log("Uploading new files to OpenAI...");
+  //   // Logic for uploading files based on `storedList` and `postIds`.
+  // }
+
+  async uploadOffChainFilesOpenAI() {
+    cron.schedule("* * * * *", async () => {
+      console.log("Running scheduled uploadOffChainFilesOpenAI task...");
+      const startTime = Date.now();
+      console.log(
+        `uploadOffChainFilesOpenAI started at ${new Date(
+          startTime
+        ).toISOString()}`
+      );
+
+      try {
+        for (const proposalType of offChainTypeList) {
+          const key =
+            proposalType !== "events"
+              ? `OffChainPosts/${proposalType}/${proposalType}-List.json`
+              : null;
+
+          if (!key) {
+            for (const eventsType of eventsTypeList) {
+              await this.processEventFiles(proposalType, eventsType);
+            }
+            continue;
+          }
+
+          const storedList = await this.s3Controller._s3GetFile(key);
+          const existingPostsFolderList =
+            await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              `OffChainPost/${proposalType}/`
+            );
+
+          if (
+            storedList &&
+            typeof storedList !== "string" &&
+            storedList.posts
+          ) {
+            if (existingPostsFolderList.length === 0) {
+              console.log("Nothing to update for", proposalType);
             } else {
-              await this.handleAllFiles(proposalType, storedList);
+              if (storedList.modifiedPostsIds?.length > 0) {
+                await this.handleModifiedFiles(proposalType, storedList);
+              } else {
+                await this.handleAllFiles(proposalType, storedList);
+              }
             }
           }
         }
+
+        const endTime = Date.now();
+        const deltaTime = endTime - startTime;
+        console.log(
+          `uploadOffChainFilesOpenAI ended at ${new Date(
+            endTime
+          ).toISOString()}`
+        );
+        console.log(`uploadOffChainFilesOpenAI took ${deltaTime} ms`);
+      } catch (err) {
+        console.error("Error executing uploadOffChainFilesOpenAI task:", err);
+        throw new Error("Error executing uploadOffChainFilesOpenAI task");
       }
-
-      const endTime = Date.now();
-      const deltaTime = endTime - startTime;
-      console.log(
-        `uploadOffChainFilesOpenAI ended at ${new Date(endTime).toISOString()}`
-      );
-      console.log(`uploadOffChainFilesOpenAI took ${deltaTime} ms`);
-    } catch (err) {
-      console.error("Error executing uploadOffChainFilesOpenAI task:", err);
-      throw new Error("Error executing uploadOffChainFilesOpenAI task");
-    }
-  });
-}
-
+    });
+  }
 }

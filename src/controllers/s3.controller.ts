@@ -47,7 +47,7 @@ export class S3Controller extends BaseHttpController {
 
       const response = await this.awsStorageService.getFile(key);
 
-      if (!response.Body) {
+      if (response && !response.Body) {
         return `File with key ${key} not found in S3`;
       }
 
@@ -91,7 +91,7 @@ export class S3Controller extends BaseHttpController {
 
       return response;
     } catch (err) {
-      console.error("Error - _s3ListFilesAndFolders: ", err);
+      // console.error("Error - _s3ListFilesAndFolders: ", err);
       return null;
     }
   }

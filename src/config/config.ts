@@ -1,4 +1,5 @@
 import {config as localConfig} from './local.config';
+import {config as stagingConfig} from './staging.config';
 import {config as prodConfig} from './production.config';
 import * as process from 'process';
 
@@ -19,6 +20,8 @@ export class Config{
                 return prodConfig;
             case 'development':
                 return localConfig;
+            case 'staging':
+                return stagingConfig;
             default:
                 return localConfig;
         }

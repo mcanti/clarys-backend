@@ -201,6 +201,11 @@ export class PolkassemblyController extends BaseHttpController {
               if (post?.track_no) {
                 delete post.track_no;
               }
+
+              if(post?.allChildBounties){
+                delete post.allChildBounties;
+              }
+
             });
             allPosts = [...allPosts, ...responseBatch.posts];
           }
@@ -263,6 +268,7 @@ export class PolkassemblyController extends BaseHttpController {
           storedList?.count &&
           storedList.count !== postsWithCategories.length)
       ) {
+        
         buffer = Buffer.from(
           JSON.stringify({
             modifiedPostsIds: [],
@@ -277,11 +283,11 @@ export class PolkassemblyController extends BaseHttpController {
           "application/json"
         );
 
-        await this.fileService.saveDataToFile(`${proposalType}-List.json`, {
-          modifiedPostsIds: [],
-          count: postsWithCategories.length,
-          posts: postsWithCategories,
-        });
+        // await this.fileService.saveDataToFile(`${proposalType}-List.json`, {
+        //   modifiedPostsIds: [],
+        //   count: postsWithCategories.length,
+        //   posts: postsWithCategories,
+        // });
       } else {
         if (storedList?.posts) {
           storedList.posts.forEach((post) => {
@@ -340,6 +346,7 @@ export class PolkassemblyController extends BaseHttpController {
           posts: postsWithCategories,
         },
       };
+
     } catch (err) {
       console.log("Error - _findOnChainPosts: ", err);
       throw Error("_findOnChainPosts failed");

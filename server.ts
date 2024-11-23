@@ -119,14 +119,14 @@ if (cluster.isPrimary) {
   console.table(serverInfo);
 
   const scheduler = container.get<SchedulerService>(SchedulerService.name);
-  scheduler.updateOnChainPosts();
-  scheduler.updateOnChainPostFolder();
-  scheduler.updateOffChainDiscussionsPosts();
-  scheduler.updateOffChainDiscussionsPostFolder();
-  scheduler.updateOffChainEventsPosts();
-  scheduler.updateOffChainEventsAndSubEventsPostFolder();
-  scheduler.updateOffChainMeetUpEventsPosts();
-  scheduler.updateOffChainMeetUpEventsPostFolder();
+  // scheduler.updateOnChainPosts();
+  // scheduler.updateOnChainPostFolder();
+  // scheduler.updateOffChainDiscussionsPosts();
+  // scheduler.updateOffChainDiscussionsPostFolder();
+  // scheduler.updateOffChainEventsPosts();
+  // scheduler.updateOffChainEventsAndSubEventsPostFolder();
+  // scheduler.updateOffChainMeetUpEventsPosts();
+  // scheduler.updateOffChainMeetUpEventsPostFolder();
 
   // scheduler.uploadOnChainFilesOpenAI();
   // scheduler.uploadOffChainFilesOpenAI();

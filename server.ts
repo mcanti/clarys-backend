@@ -33,7 +33,7 @@ function setupStatusPage(app) {
     let file = fsReadFile(join(__dirname, "public", "index.html"));
 
     if (file) {
-      file = file.replace("{{applicationName}}", "LucidAI Express API Server");
+      file = file.replace("{{applicationName}}", "Clarys Express API Server");
       file = file.replace("{{serverStartDate}}", startDate.toISOString());
       file = file.replace(
         "{{serverUptime}}",

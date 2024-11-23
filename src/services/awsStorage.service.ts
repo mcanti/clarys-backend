@@ -97,7 +97,7 @@ export class AwsStorageService {
 
       return response;
     } catch (err: any) {
-      console.error("Error in getFile: ", err);
+      // console.error("Error in getFile: ", err);
       return null;
     }
   }

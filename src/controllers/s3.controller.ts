@@ -47,6 +47,10 @@ export class S3Controller extends BaseHttpController {
 
       const response = await this.awsStorageService.getFile(key);
 
+      if(!response){
+        return null;
+      }
+
       if (response && !response.Body) {
         return `File with key ${key} not found in S3`;
       }
@@ -68,7 +72,7 @@ export class S3Controller extends BaseHttpController {
         
 
         return response;
-      } else{
+      } else {
 
         const jsonData = await streamToString(response.Body as Readable);
         const parsedData = JSON.parse(jsonData);
@@ -77,7 +81,7 @@ export class S3Controller extends BaseHttpController {
       }
       
     } catch (err) {
-      console.error("Error - _s3GetFile: ", err);
+      // console.error("Error - _s3GetFile: ", err);
       return null;
     }
   }

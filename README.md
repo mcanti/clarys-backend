@@ -6,7 +6,7 @@ This project is containerized for easy setup and deployment. You can use either 
 
 Ensure you have either Docker or Podman installed on your system.
 
-[Docker Installation Guide](https://docs.docker.com/engine/install/https:/)
+[Docker Installation Guide](https://docs.docker.com/engine/install/)
 [Podman Installation Guide](https://podman.io/docs/installation)
 
 ## Building the Docker Image

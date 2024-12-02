@@ -1,4 +1,6 @@
 import { injectable } from "inversify";
+import { OpenAI } from "openai";
+import { Readable } from "stream";
 import axios from "axios";
 import https from "https";
 
@@ -41,10 +43,14 @@ function logResponse(response) {
 export class OpenAIService {
   private apiKey: string;
   private vectorStoreId: string;
+  private openai: OpenAI;
 
   constructor() {
     this.apiKey = process.env.OPENAI_API_KEY as string;
     this.vectorStoreId = process.env.VECTOR_STORE_ID as string;
+    this.openai = new OpenAI({
+      apiKey: this.apiKey,
+    });
   }
 
   async listFiles(params: ListFilesParamsInterface) {
@@ -155,35 +161,15 @@ export class OpenAIService {
 
   async uploadFile(params: UploadFileBodyParamsInterface) {
     try {
-      const formData = new FormData();
-      const blobFile = fileToBlob(params.file);
-      formData.append("file", blobFile, params.filename);
-      formData.append("purpose", params.purpose);
-
-      const axiosInstance = axios.create({
-        timeout: 300000, // 5-minute timeout for large file uploads
-      });
-
-      const response = await axiosInstance.post(
-        "https://api.openai.com/v1/files",
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            // "Content-Type": "multipart/form-data", // Optional: Axios sets this automatically for FormData
+      const response =
+        await this.openai.beta.vectorStores.fileBatches.uploadAndPoll(
+          this.vectorStoreId,
+          {
+            files: [params.file],
           },
-          httpsAgent: new https.Agent({
-            keepAlive: true,
-            rejectUnauthorized: process.env.NODE_ENV !== "production",
-          }),
-        }
-      );
+        );
 
-      if (response && response?.data) {
-        return response.data;
-      }
-
-      return response;
+      return response ?? null;
     } catch (err) {
       logResponse({
         error: err.response?.data || "An error occurred during the upload.",
@@ -274,7 +260,7 @@ export class OpenAIService {
     }
   }
 
-  async listVectorStoreFiles(params: ListVectorStoreFilesParamsInterface){
+  async listVectorStoreFiles(params: ListVectorStoreFilesParamsInterface) {
     try {
       const axiosInstance = axios.create({
         timeout: 300000, // 5-minute timeout

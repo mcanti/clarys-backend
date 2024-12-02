@@ -14,7 +14,6 @@ export interface GetFileContentParamsInterface {
 }
 
 export interface UploadFileBodyParamsInterface {
-    purpose: string,
     file: File,
     filename: string
 }

@@ -1,4 +1,5 @@
 import { inject } from "inversify";
+import { Readable } from "stream";
 import express, { Request, Response } from "express";
 import multer from "multer";
 
@@ -16,6 +17,10 @@ import { OpenAIService } from "../services/openAI.service";
 import { ResponseWrapperCode } from "../services/responseWrapper.service";
 
 import { jsonToBlob } from "../helpers/jsonConvertor.helper";
+import {
+  bufferToStream,
+  stringToStream,
+} from "../helpers/streamToStringHelper";
 
 // const upload = multer();
 
@@ -85,13 +90,13 @@ export class OpenAIController extends BaseHttpController {
     }
   }
 
-  async _uploadFile(purpose: string, file: File, filename: string) {
+  async _uploadFile(file: File, filename: string) {
     try {
       const response = await this.openAIService.uploadFile({
-        purpose,
         file,
         filename,
       });
+
       return response;
     } catch (err) {
       console.log("Error - _uploadFile: ", err);
@@ -370,13 +375,12 @@ export class OpenAIController extends BaseHttpController {
   @httpPost("/uploadFile")
   async uploadFile(
     @response() res: Response,
-    @requestBody() body: { purpose: string; file: File; filename: string }
+    @requestBody() body: { file: File; filename: string }
   ) {
     try {
-      const { purpose, file, filename } = body;
-      console.log("purpose purpose", filename);
+      const { file, filename } = body;
 
-      const result = await this._uploadFile(purpose, file, filename);
+      const result = await this._uploadFile(file, filename);
 
       res.apiSuccess({
         ...result,

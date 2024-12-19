@@ -21,7 +21,6 @@ import { AwsStorageService } from "../services/awsStorage.service";
 import { ResponseWrapperCode } from "../services/responseWrapper.service";
 import { validateSchema } from "../middleware/validator.middleware";
 
-import { FileService } from "../services/file.service";
 import { GoogleServices } from "../services/google.services";
 import {
   findFiledId,
@@ -41,12 +40,10 @@ import { containsSubstring } from "../helpers/categories.helper";
 export class PolkassemblyController extends BaseHttpController {
   private readonly filePath: string;
 
-  //config inject awsStorageService or fileService
   constructor(
     @inject("PolkassemblyService")
     private polkassemblyService: PolkassemblyService,
     @inject("AwsStorageService") private awsStorageService: AwsStorageService,
-    @inject("FileService") private fileService: FileService,
     @inject("S3Controller") private s3Controller: S3Controller,
     @inject("GoogleServices") private googleService: GoogleServices
   ) {
@@ -113,8 +110,6 @@ export class PolkassemblyController extends BaseHttpController {
         `${folder}/#${postId}.json`,
         "application/json"
       );
-
-      // await this.fileService.saveDataToFile(`${folder}/#${postId}.json`,response);
 
       return result;
     } catch (err) {
@@ -283,11 +278,6 @@ export class PolkassemblyController extends BaseHttpController {
           "application/json"
         );
 
-        // await this.fileService.saveDataToFile(`${proposalType}-List.json`, {
-        //   modifiedPostsIds: [],
-        //   count: postsWithCategories.length,
-        //   posts: postsWithCategories,
-        // });
       } else {
         if (storedList?.posts) {
           storedList.posts.forEach((post) => {
@@ -327,12 +317,6 @@ export class PolkassemblyController extends BaseHttpController {
               `${folder}/${proposalType}-List.json`,
               "application/json"
             );
-
-            await this.fileService.saveDataToFile(`${proposalType}-List.json`, {
-              modifiedPostsIds: modifiedPostsIds,
-              count: postsWithCategories.length,
-              posts: postsWithCategories,
-            });
           }
         }
       }
@@ -529,14 +513,6 @@ export class PolkassemblyController extends BaseHttpController {
           "application/json"
         );
 
-        await this.fileService.saveDataToFile(
-          `${folder}/${proposalType}-List.json`,
-          {
-            modifiedPostsIds: [],
-            count: postsWithCategories.length,
-            posts: postsWithCategories,
-          }
-        );
       }
 
       return {

@@ -16,6 +16,7 @@ import { DotEventsController } from "../controllers/dotevents.controller";
 import { DotMeetUpsController } from "../controllers/dotMeetUps.controller";
 import { S3Controller } from "../controllers/s3.controller";
 import { OpenAIController } from "../controllers/openAI.controller";
+import { UtilityController } from "../controllers/utility.controller";
 
 const container = new Container();
 
@@ -43,5 +44,6 @@ container
 
 container.bind<S3Controller>(S3Controller.name).to(S3Controller);
 container.bind<OpenAIController>(OpenAIController.name).to(OpenAIController);
+container.bind<UtilityController>(UtilityController.name).to(UtilityController);
 
 export { container };

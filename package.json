@@ -4,11 +4,11 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
-    "devStart": "nodemon -r dotenv/config --ignore data server.ts",
+    "devStart": "nodemon -r dotenv/config --ignore data --ignore tempFile.json server.ts",
     "generate-swagger": "swagger-jsdoc -d ./src/swagger.json",
     "lint": "eslint . --ext .ts",
     "lint-and-fix": "eslint . --ext .ts --fix",
-    "start": "node dist/server.js",
+    "start": "node -r dotenv/config dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -35,11 +35,11 @@
     "js": "^0.1.0",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^3.0.3",
-    "openai": "^4.73.1",
+    "openai": "^4.76.1",
     "path": "^0.12.7",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
-    "sonic-boom": "^4.2.0",
+    "puppeteer": "^23.10.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-dist": "^5.17.14",
     "swagger-ui-express": "^5.0.1"

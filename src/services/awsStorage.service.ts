@@ -31,14 +31,14 @@ let agent = new https.Agent({
   rejectUnauthorized: true,
 });
 
-if (process.env.NODE_ENV === "development") {
-  const certs = [readFileSync("./Zscaler_Root_CA.pem")];
+// if (process.env.NODE_ENV === "development") {
+//   const certs = [readFileSync("./Zscaler_Root_CA.pem")];
 
-  agent = new https.Agent({
-    rejectUnauthorized: true,
-    ca: certs,
-  });
-}
+//   agent = new https.Agent({
+//     rejectUnauthorized: true,
+//     ca: certs,
+//   });
+// }
 
 @injectable()
 export class AwsStorageService {
@@ -123,44 +123,85 @@ export class AwsStorageService {
     prefix: string
   ): Promise<string[]> {
     try {
-      const listObjectsCommand = new ListObjectsV2Command({
-        Bucket: this.s3Bucket,
-        Prefix: prefix,
-        Delimiter: "/",
-      });
+      let continuationToken = undefined;
+      const fileList = [];
+      const folderList = [];
 
-      const response: ListObjectsV2CommandOutput = await this.s3.send(
-        listObjectsCommand
-      );
+      do {
+        const listObjectsCommand = new ListObjectsV2Command({
+          Bucket: this.s3Bucket,
+          Prefix: prefix,
+          Delimiter: "/",
+          ContinuationToken: continuationToken,
+        });
+    
+       
+        const response: ListObjectsV2CommandOutput = await this.s3.send(
+          listObjectsCommand
+        );
+
+        if (whatToList === "files") {
+          if (response.Contents) {
+            response.Contents.forEach((file) => {
+              fileList.push(file.Key);
+            });
+          }
+        }
+  
+        if (whatToList === "folders") {
+          if (response?.CommonPrefixes) {
+            response.CommonPrefixes.forEach((folder) => {
+              folderList.push(folder.Prefix);
+            });
+          }
+        }
+    
+        continuationToken = response.NextContinuationToken; // Set for the next iteration
+      } while (continuationToken);
 
       if (whatToList === "files") {
-        if (response.Contents) {
-          const fileList = [];
-          response.Contents.forEach((file) => {
-            fileList.push(file.Key);
-          });
-
-          return fileList;
-        }
-
-        return [];
+        return fileList;
       }
 
       if (whatToList === "folders") {
-        if (response?.CommonPrefixes) {
-          const folderList = [];
-          response.CommonPrefixes.forEach((folder) => {
-            folderList.push(folder.Prefix);
-          });
-
-          return folderList;
-        }
-
-        return [];
+        return folderList;
       }
+
+      return [];
     } catch (err) {
       // console.error("Error in listFilesAndFolders: ", err);
       throw new Error(`Unable listFilesAndFolders`);
+    }
+  }
+
+  async getAllFiles(){
+    let continuationToken = undefined;
+    let files=[]
+  
+    try {
+      // Keep paginating until all objects are retrieved
+      do {
+        const listObjectsCommand = new ListObjectsV2Command({
+          Bucket: this.s3Bucket,
+          ContinuationToken: continuationToken,
+        });
+        const response: ListObjectsV2CommandOutput = await this.s3.send(
+          listObjectsCommand
+        );
+  
+        if (response?.Contents) {
+
+  
+          files.push(...response.Contents);
+        }
+  
+        continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+      } while (continuationToken);
+  
+      return files;
+    } catch (err) {
+      console.error("Error retrieving files: ", err);
+      return []
     }
   }
 }

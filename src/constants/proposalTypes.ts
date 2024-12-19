@@ -1,8 +1,8 @@
 export const proposalTypeList = [
-  // "referendums_v2",
+  "referendums_v2",
   "bounties",
-  // "child_bounties",
-  // "tips"
+  "child_bounties",
+  "tips"
 ];
 
 export const proposalTypeObject = {
@@ -22,9 +22,9 @@ export const eventsTypeList = ["events", "subEvents"];
 
 export const onChainProposalTypeList = [
   "referendums_v2",
-  // "bounties",
-  // "child_bounties",
-  // "tips"
+  "bounties",
+  "child_bounties",
+  "tips"
 ];
 
 export const offChainProposalTypeList = [

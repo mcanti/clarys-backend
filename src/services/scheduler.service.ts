@@ -218,7 +218,7 @@ export class SchedulerService {
   }
 
   async updateOffChainDiscussionsPostFolder() {
-    cron.schedule("*/2 * * *", async () => {
+    cron.schedule("0 */2 * * *", async () => {
       console.log("Running scheduled task...");
 
       try {

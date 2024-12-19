@@ -18,6 +18,7 @@ import { ResponseWrapperCode } from "../services/responseWrapper.service";
 
 import { Readable } from "stream";
 import { streamToString } from "../helpers/streamToStringHelper";
+import { s3File } from "../interfaces/s3.interfaces";
 
 @controller("/api/s3")
 export class S3Controller extends BaseHttpController {
@@ -94,6 +95,32 @@ export class S3Controller extends BaseHttpController {
       );
 
       return response;
+    } catch (err) {
+      // console.error("Error - _s3ListFilesAndFolders: ", err);
+      return null;
+    }
+  }
+
+  async _s3GetListOfProposals(objectType: string){
+    try {
+      const response = await this.awsStorageService.getAllFiles();
+      console.log(response);
+      
+
+      const filteredFiles = response.filter((file: s3File) => {
+        if(file.Key.endsWith(".docx")){
+          return file;
+        }
+
+        if(file.Key.includes('tips')||file.Key.includes('referendums_v2')){
+          return file;
+        }
+      }).map((file) => file.Key.split('/').slice(-1));
+
+      return {
+        numberOfProposals: filteredFiles.length,
+        proposals:filteredFiles
+      };
     } catch (err) {
       // console.error("Error - _s3ListFilesAndFolders: ", err);
       return null;
@@ -275,6 +302,43 @@ export class S3Controller extends BaseHttpController {
         objectType ? objectType : "files",
         prefix ? prefix : ""
       );
+
+      return res.apiSuccess(response);
+    } catch (err) {
+      console.error("Error - s3ListFilesAndFolders: ", err);
+
+      const ErrorResponse = ResponseWrapperCode.generalError;
+      ErrorResponse.message = `Failed to list files an folders: ${err.message}`;
+      return res.apiError(ErrorResponse);
+    }
+  }
+
+  /**
+   * @swagger
+   * /api/s3/s3GetListOfProposals:
+   *   get:
+   *     tags:
+   *       - S3
+   *     summary: Get the total number of proposals and the proposals list docx names
+   *     responses:
+   *       200:
+   *         description: Successfully retrieved the file
+   *         content:
+   *           application/octet-stream:
+   *             schema:
+   *               type: object
+   *               format: binary
+   *       404:
+   *         description: Files not found
+   *       500:
+   *         description: Internal server error
+   */
+  @httpGet("/s3GetListOfProposals")
+  async s3GetListOfProposals(
+    @response() res: Response,
+  ) {
+    try {
+      const response = await this._s3GetListOfProposals( "files");
 
       return res.apiSuccess(response);
     } catch (err) {

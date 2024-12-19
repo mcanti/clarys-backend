@@ -96,7 +96,7 @@ if (cluster.isPrimary) {
     setupSwagger(app);
     app.use(
       cors({
-        origin: "http://localhost:3000",
+        origin: [`http://0.0.0.0:${port}`, `https://0.0.0.0:${port}`],
         methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
         credentials: false,
       })
@@ -112,8 +112,8 @@ if (cluster.isPrimary) {
 
   const serverInfo = {
     "API Port": port,
-    "Localhost URL": `http://localhost:${port}`,
-    "Swagger URL": `http://localhost:${port}/swagger`,
+    "Localhost URL": `http://0.0.0.0:${port}`,
+    "Swagger URL": `http://0.0.0.0:${port}/swagger`,
   };
 
   console.table(serverInfo);
@@ -121,13 +121,16 @@ if (cluster.isPrimary) {
   const scheduler = container.get<SchedulerService>(SchedulerService.name);
   // scheduler.updateOnChainPosts();
   // scheduler.updateOnChainPostFolder();
+
   // scheduler.updateOffChainDiscussionsPosts();
   // scheduler.updateOffChainDiscussionsPostFolder();
+
   // scheduler.updateOffChainEventsPosts();
   // scheduler.updateOffChainEventsAndSubEventsPostFolder();
+
   // scheduler.updateOffChainMeetUpEventsPosts();
   // scheduler.updateOffChainMeetUpEventsPostFolder();
 
-  // scheduler.uploadOnChainFilesOpenAI();
-  // scheduler.uploadOffChainFilesOpenAI();
+  // scheduler.updateOnChainDataToVectorStore();
+  // scheduler.updateOffChainDataToVectorStore();
 }

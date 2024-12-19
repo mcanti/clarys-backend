@@ -58,7 +58,7 @@ export class SchedulerService {
   //List Schedulers
 
   async updateOnChainPosts() {
-    cron.schedule("*/6 * * *", async () => {
+    cron.schedule("0 */6 * * *", async () => {
       console.log("Running scheduled task...");
 
       try {
@@ -82,7 +82,7 @@ export class SchedulerService {
   }
 
   async updateOffChainDiscussionsPosts() {
-    cron.schedule("*/1 * * *", async () => {
+    cron.schedule("0 */1 * * *", async () => {
       console.log("Running scheduled updateOffChainDiscussionsPosts task...");
 
       try {
@@ -110,7 +110,7 @@ export class SchedulerService {
   }
 
   async updateOffChainEventsPosts() {
-    cron.schedule("*/1 * * *", async () => {
+    cron.schedule("0 */1 * * *", async () => {
       console.log("Running scheduled task...");
 
       try {
@@ -130,7 +130,7 @@ export class SchedulerService {
   }
 
   async updateOffChainMeetUpEventsPosts() {
-    cron.schedule("*/1 * * *", async () => {
+    cron.schedule("0 */1 * * *", async () => {
       console.log("Running scheduled task...");
 
       try {
@@ -154,7 +154,7 @@ export class SchedulerService {
   //Folder Objects and Files Schedulers
 
   async updateOnChainPostFolder() {
-    cron.schedule("*/10 * * *", async () => {
+    cron.schedule("0 */10 * * *", async () => {
       console.log("Running scheduled task...");
 
       try {
@@ -289,7 +289,7 @@ export class SchedulerService {
   }
 
   async updateOffChainEventsAndSubEventsPostFolder() {
-    cron.schedule("*/2 * * *", async () => {
+    cron.schedule("0 */2 * * *", async () => {
       console.log(
         "Running scheduled updateOffChainEventsAndSubEventsPostFolder task ..."
       );
@@ -560,7 +560,7 @@ export class SchedulerService {
   }
 
   async updateOffChainMeetUpEventsPostFolder() {
-    cron.schedule("*/2 * * *", async () => {
+    cron.schedule("0 */2 * * *", async () => {
       console.log(
         "Running scheduled updateOffChainMeetUpEventsPostFolder task ..."
       );
@@ -833,7 +833,7 @@ export class SchedulerService {
   //OPEN AI
 
   async updateOnChainDataToVectorStore() {
-    cron.schedule("*/12 * * *", async () => {
+    cron.schedule("0 */12 * * *", async () => {
     console.log("Running scheduled task: updateOnChainDataToVectorStore ...");
     try {
       let keysAndNames = [];
@@ -955,7 +955,7 @@ export class SchedulerService {
   }
 
   async updateOffChainDataToVectorStore() {
-    cron.schedule("*/4 * * *", async () => {
+    cron.schedule("0 */4 * * *", async () => {
       console.log(
         "Running scheduled task: updateOffChainDataToVectorStore ..."
       );

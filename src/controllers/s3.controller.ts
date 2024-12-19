@@ -99,7 +99,6 @@ export class S3Controller extends BaseHttpController {
   async _s3GetListOfProposals(objectType: string) {
     try {
       const response = await this.awsStorageService.getAllFiles();
-      console.log(response);
 
       const filteredFiles = response
         .filter((file: s3File) => {
@@ -116,24 +115,23 @@ export class S3Controller extends BaseHttpController {
         })
         .map((file) => {
           const data = file.Key.split("/").slice(-4);
-          let name = data[3];
-          if (data.includes("subEvents")) {
-            if(data[3].includes(".docx")){
-              name = `subEvent-Id${data[1]}-${data[3]}`;
-            }else{
-              name = `subEvent-Id${data[2]}-${data[3]}`;
-            }
-            
-          } else {
-            if(data[3].includes(".docx")){
-              name = `${data[0]}-Id${data[1]}-${data[3]}`;
-            }else{
-              name = `${data[1]}-Id${data[2]}-${data[3]}`;
+
+          if (data.length > 3) {
+            if (data.includes("subEvents")) {
+              if (data[3].includes(".docx")) {
+                return `subEvent-Id${data[1]}-${data[3]}`;
+              } else {
+                return `subEvent-Id${data[2]}-${data[3]}`;
+              }
+            } else {
+              if (data[3].includes(".docx")) {
+                return `${data[0]}-Id${data[1]}-${data[3]}`;
+              } else {
+                return `${data[1]}-Id${data[2]}-${data[3]}`;
+              }
             }
           }
-
-          return name;
-        });
+        }).filter((item) => item != null)
 
       return {
         numberOfProposals: filteredFiles.length,

@@ -11,7 +11,7 @@ import {
   queryParam,
   response,
 } from "inversify-express-utils";
-import  { Document, Packer } from 'docx';
+import { Document, Packer } from "docx";
 
 import { AwsStorageService } from "../services/awsStorage.service";
 import { ResponseWrapperCode } from "../services/responseWrapper.service";
@@ -45,10 +45,9 @@ export class S3Controller extends BaseHttpController {
 
   async _s3GetFile(key: string) {
     try {
-
       const response = await this.awsStorageService.getFile(key);
 
-      if(!response){
+      if (!response) {
         return null;
       }
 
@@ -57,30 +56,26 @@ export class S3Controller extends BaseHttpController {
       }
 
       if (key.includes("docx")) {
-
         if (response.Body instanceof Readable) {
           const chunks = [];
 
           for await (const chunk of response.Body) {
             chunks.push(chunk);
           }
-          
+
           const fileBuffer = Buffer.concat(chunks);
           return fileBuffer;
         } else {
           throw new Error("data.Body is not a readable stream.");
         }
-        
 
         return response;
       } else {
-
         const jsonData = await streamToString(response.Body as Readable);
         const parsedData = JSON.parse(jsonData);
-  
+
         return parsedData;
       }
-      
     } catch (err) {
       // console.error("Error - _s3GetFile: ", err);
       return null;
@@ -101,25 +96,48 @@ export class S3Controller extends BaseHttpController {
     }
   }
 
-  async _s3GetListOfProposals(objectType: string){
+  async _s3GetListOfProposals(objectType: string) {
     try {
       const response = await this.awsStorageService.getAllFiles();
       console.log(response);
-      
 
-      const filteredFiles = response.filter((file: s3File) => {
-        if(file.Key.endsWith(".docx")){
-          return file;
-        }
+      const filteredFiles = response
+        .filter((file: s3File) => {
+          if (file.Key.endsWith(".docx")) {
+            return file;
+          }
 
-        if(file.Key.includes('tips')||file.Key.includes('referendums_v2')){
-          return file;
-        }
-      }).map((file) => file.Key.split('/').slice(-1)[0]);
+          if (
+            file.Key.includes("tips") ||
+            file.Key.includes("referendums_v2")
+          ) {
+            return file;
+          }
+        })
+        .map((file) => {
+          const data = file.Key.split("/").slice(-4);
+          let name = data[3];
+          if (data.includes("subEvents")) {
+            if(data[3].includes(".docx")){
+              name = `subEvent-Id${data[1]}-${data[3]}`;
+            }else{
+              name = `subEvent-Id${data[2]}-${data[3]}`;
+            }
+            
+          } else {
+            if(data[3].includes(".docx")){
+              name = `${data[0]}-Id${data[1]}-${data[3]}`;
+            }else{
+              name = `${data[1]}-Id${data[2]}-${data[3]}`;
+            }
+          }
+
+          return name;
+        });
 
       return {
         numberOfProposals: filteredFiles.length,
-        proposals:filteredFiles
+        proposals: filteredFiles,
       };
     } catch (err) {
       // console.error("Error - _s3ListFilesAndFolders: ", err);
@@ -233,14 +251,18 @@ export class S3Controller extends BaseHttpController {
     try {
       const response = await this._s3GetFile(key);
 
-      const docName = key.split('/');
+      const docName = key.split("/");
 
-      if(key.includes('docx')){
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-        res.setHeader('Content-Disposition', `attachment; filename=${docName[docName.length-1]}`);
+      if (key.includes("docx")) {
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename=${docName[docName.length - 1]}`
+        );
       }
-
-      
 
       if (typeof response === "string") {
         const ErrorResponse = ResponseWrapperCode.missingItem;
@@ -334,11 +356,9 @@ export class S3Controller extends BaseHttpController {
    *         description: Internal server error
    */
   @httpGet("/s3GetListOfProposals")
-  async s3GetListOfProposals(
-    @response() res: Response,
-  ) {
+  async s3GetListOfProposals(@response() res: Response) {
     try {
-      const response = await this._s3GetListOfProposals( "files");
+      const response = await this._s3GetListOfProposals("files");
 
       return res.apiSuccess(response);
     } catch (err) {

@@ -115,7 +115,7 @@ export class S3Controller extends BaseHttpController {
         if(file.Key.includes('tips')||file.Key.includes('referendums_v2')){
           return file;
         }
-      }).map((file) => file.Key.split('/').slice(-1));
+      }).map((file) => file.Key.split('/').slice(-1)[0]);
 
       return {
         numberOfProposals: filteredFiles.length,

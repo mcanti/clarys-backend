@@ -44,6 +44,9 @@ function setupStatusPage(app) {
 
     res.send(file);
   });
+  app.get("/test", (req, res) => {
+        res.send(__dirname);
+  });
 }
 
 function setupSwagger(app) {

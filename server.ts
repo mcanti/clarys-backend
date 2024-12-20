@@ -30,7 +30,7 @@ const startDate = new Date();
 
 function setupStatusPage(app) {
   app.get("/", (req, res) => {
-    let file = fsReadFile(join(__dirname, "public", "index.html"));
+    let file = fsReadFile(join(__dirname, "index.html"));
 
     if (file) {
       file = file.replace("{{applicationName}}", "Clarys Express API Server");
@@ -67,6 +67,12 @@ function setupSwagger(app) {
     swaggerUiExpress.serve,
     swaggerUiExpress.setup(swaggerDocs)
   );
+
+  app.get("/test", (req, res) => {
+    res.send(__dirname);
+  });
+
+
 }
 
 const server = new InversifyExpressServer(container);

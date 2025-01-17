@@ -30,7 +30,7 @@ const startDate = new Date();
 
 function setupStatusPage(app) {
   app.get("/", (req, res) => {
-    let file = fsReadFile(join(__dirname, "index.html"));
+    let file = fsReadFile(join(__dirname, "public", "index.html"));
 
     if (file) {
       file = file.replace("{{applicationName}}", "Clarys Express API Server");

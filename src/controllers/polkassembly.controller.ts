@@ -241,7 +241,7 @@ export class PolkassemblyController extends BaseHttpController {
 
         postsWithCategories.push({
           ...post,
-          categories: [...new Set(categories)],
+          categories: categories.length > 0 ? [...new Set(categories)]: [...new Set(['Miscellaneous'])],
         });
       });
 

@@ -5,7 +5,7 @@ import * as process from "process";
 import { AwsStorageService } from "../services/awsStorage.service";
 import { FileService } from "../services/file.service";
 import { GoogleServices } from "../services/google.services";
-import { AwsDynamoDBService } from "../services/awsDynamoDb.service";
+import { AwsDynamoDBService } from "../services/awsDynamoDB.service";
 
 //Data Services
 import { PolkassemblyService } from "../services/polkassembly.service";

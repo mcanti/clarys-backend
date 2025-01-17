@@ -13,7 +13,7 @@ import {
 } from "inversify-express-utils";
 import { Readable } from "stream";
 
-import { AwsDynamoDBService } from "../services/awsDynamoDb.service";
+import { AwsDynamoDBService } from "../services/awsDynamoDB.service";
 import { AwsStorageService } from "../services/awsStorage.service";
 import { ResponseWrapperCode } from "../services/responseWrapper.service";
 

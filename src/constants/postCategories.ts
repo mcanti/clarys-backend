@@ -433,15 +433,15 @@ export const CategoriesForKeyword = [
   },
   {
     keyword: "Polkadot",
-    categories: ["Ecosystem", "Protocol", "Governance "],
+    categories: ["Ecosystem", "Protocol", "Governance"],
   },
   {
     keyword: "Kusama",
-    categories: ["Ecosystem", "Protocol", "Governance "],
+    categories: ["Ecosystem", "Protocol", "Governance"],
   },
   {
     keyword: "DOT",
-    categories: ["Ecosystem", "Protocol", "Governance "],
+    categories: ["Ecosystem", "Protocol", "Governance"],
   },
   {
     keyword: "growth",

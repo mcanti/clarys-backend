@@ -24,7 +24,7 @@ export const onChainProposalTypeList = [
   "referendums_v2",
   "bounties",
   "child_bounties",
-  "tips"
+  "tips",
 ];
 
 export const offChainProposalTypeList = [

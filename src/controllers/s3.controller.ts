@@ -77,7 +77,7 @@ export class S3Controller extends BaseHttpController {
         return parsedData;
       }
     } catch (err) {
-      // console.error("Error - _s3GetFile: ", err);
+      console.error("Error - _s3GetFile: ", err);
       return null;
     }
   }

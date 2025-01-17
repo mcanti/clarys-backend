@@ -193,9 +193,6 @@ export class PolkassemblyController extends BaseHttpController {
               if (post?.spam_users_count) {
                 delete post.spam_users_count;
               }
-              if (post?.track_no) {
-                delete post.track_no;
-              }
 
               if(post?.allChildBounties){
                 delete post.allChildBounties;
@@ -244,7 +241,7 @@ export class PolkassemblyController extends BaseHttpController {
 
         postsWithCategories.push({
           ...post,
-          categories: categories,
+          categories: [...new Set(categories)],
         });
       });
 

@@ -22,7 +22,7 @@ import {
   proposalTypes,
   proposalSubType,
 } from "../constants/dynamoDbTypes";
-import { eventsTypeList } from "../constants/proposalTypes";
+import { eventsTypeList, proposalTypeList } from "../constants/proposalTypes";
 
 import { streamToString } from "../helpers/streamToStringHelper";
 
@@ -247,6 +247,28 @@ export class DynamoDBController extends BaseHttpController {
           );
 
           return postsResponse;
+        }
+      } else {
+        const tableNames = [];
+
+        for (const postsType of PostsTypes) {
+          const folderPaths = await this.awsStorageService.listFilesAndFolders(
+            "folders",
+            `${postsType}/`
+          );
+  
+          folderPaths.forEach((path) => {
+            const folderName = path.replace(`${postsType}/`, "").replace("/", "");
+            tableNames.push(folderName);
+          });
+        }
+
+        for(const tableName of tableNames){
+          const postsResponse = await this.awsDynamoDBService.getFilteredPosts(
+            tableName,
+            filters
+          );
+          response = [...response, ...postsResponse];
         }
       }
       

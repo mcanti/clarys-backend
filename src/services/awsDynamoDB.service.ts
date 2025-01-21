@@ -7,6 +7,7 @@ import {
   CreateTableCommand,
   PutItemCommand,
   PutItemCommandInput,
+  UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { NodeHttpHandler } from "@aws-sdk/node-http-handler";
 import https from "https";

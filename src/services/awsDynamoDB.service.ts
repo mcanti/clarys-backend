@@ -7,6 +7,7 @@ import {
   CreateTableCommand,
   PutItemCommand,
   PutItemCommandInput,
+  UpdateItemCommandInput,
   UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { NodeHttpHandler } from "@aws-sdk/node-http-handler";
@@ -174,6 +175,79 @@ export class AwsDynamoDBService {
       console.error("Error adding item:", err);
       return null;
     }
+  };
+
+  updateItemIntoTable = async (tableName: string,
+    item: {
+      postId: string;
+      creationDate: string;
+      type: string;
+      subType: string;
+      categories: string[];
+      requestedAmount: string;
+      reward: string;
+      submitter: string;
+      vectorFileId: string;
+      post: Record<string, any>; // Allow mixed types in post object
+    }) => {
+    try {
+      const categoriesAsDynamoDBList = item.categories.map((category) => ({
+        S: category,
+      }));
+
+      const convertToDynamoDBFormat = (data: any): any => {
+        if (data === null || data === undefined) {
+          return { NULL: true };
+        } else if (typeof data === "string") {
+          return { S: data };
+        } else if (typeof data === "number") {
+          return { N: data.toString() };
+        } else if (typeof data === "boolean") {
+          return { BOOL: data };
+        } else if (Array.isArray(data)) {
+          return { L: data.map((item) => convertToDynamoDBFormat(item)) };
+        } else if (typeof data === "object") {
+          return {
+            M: Object.entries(data).reduce((acc, [key, value]) => {
+              acc[key] = convertToDynamoDBFormat(value);
+              return acc;
+            }, {}),
+          };
+        } else {
+          throw new Error(`Unsupported data type: ${typeof data}`);
+        }
+      };
+
+      const postAsDynamoDBMap = convertToDynamoDBFormat(item.post);
+
+      const itemParams = {
+        postId: { S: item.postId },
+        creationDate: { S: item.creationDate },
+        type: { S: item.type },
+        subType: { S: item.subType },
+        categories: { L: categoriesAsDynamoDBList },
+        requestedAmount: { S: item.requestedAmount },
+        reward: { S: item.reward },
+        submitter: { S: item.submitter },
+        vectorFileId: { S: item.vectorFileId },
+        json: postAsDynamoDBMap,
+      };
+
+      const params: UpdateItemCommandInput = {
+        TableName: tableName,
+        Key: itemParams
+      };
+
+      const command = new UpdateItemCommand(params);
+      const addItemToTableResponse = await this.dynamoDBClient.send(command);
+      console.log("Item added successfully: ", addItemToTableResponse);
+
+      return addItemToTableResponse;
+    } catch (err) {
+      console.error("Error adding item:", err);
+      return null;
+    }
+
   };
 
   dynamoDBToJSON = (dynamoItem: Record<string, any>): any => {

@@ -215,6 +215,15 @@ export class DynamoDBController extends BaseHttpController {
     }
   }
 
+  async _updateDataToDynamoDBTable() {
+    try {
+
+
+    } catch (err) {
+     
+    }
+  }
+
   async _getPostsData(filters: {postId: string,
     type: string,
             subType: string,
@@ -228,7 +237,7 @@ export class DynamoDBController extends BaseHttpController {
     try {
       let response = [];
 
-      if (filters.type) {
+      if (filters && filters.type) {
         if (filters.type === "proposal" || filters.type === "proposals") {
           for (const proposalType of proposalTypes) {
             console.log("proposalType", proposalType);
@@ -391,6 +400,51 @@ export class DynamoDBController extends BaseHttpController {
     }
   }
 
+    /**
+   * @swagger
+   * /api/dynamoDB/updateDataToDynamoDBTable:
+   *   post:
+   *     tags:
+   *       - DynamoDB
+   *     summary:Update date into DynamoDB Table
+   *     responses:
+   *       200:
+   *         description: Data updated successfully into DynamoDB Table
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   type: object
+   *       400:
+   *         description: Invalid input
+   *       500:
+   *         description: Internal server error
+   */
+    @httpPost("/updateDataToDynamoDBTable")
+    async updateDataToDynamoDBTable(
+      @request() req: Request,
+      @response() res: Response
+    ) {
+      try {
+        const response = await this._updateDataToDynamoDBTable();
+  
+        return res.apiSuccess({
+          message: "Data updated into DynamoDB successfully",
+          data: response,
+        });
+      } catch (err) {
+        console.error("Error - updateDataToDynamoDBTable: ", err);
+  
+        const ErrorResponse = ResponseWrapperCode.generalError;
+        ErrorResponse.message = `Failed to update data into DynamoDB Table: ${err.message}`;
+        return res.apiError(ErrorResponse);
+      }
+    }
+
   /**
    * @swagger
    * /api/dynamoDB/getPostsData:
@@ -470,7 +524,7 @@ export class DynamoDBController extends BaseHttpController {
   ) {
     try {
 
-      await this._getPostsData({postId: postId,
+      const response = await this._getPostsData({postId: postId,
         type: type,
                 subType: subType,
                 category: category,

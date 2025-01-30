@@ -51,7 +51,7 @@ function setupSwagger(app) {
     definition: {
       openapi: "3.0.0",
       info: {
-        title: "Hello",
+        title: "Clarys AI Backend",
         version: "1.0.0",
       },
       components: {},

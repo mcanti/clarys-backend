@@ -627,69 +627,101 @@ export class DynamoDBController extends BaseHttpController {
     }
   }
 
-  /**
-   * @swagger
-   * /api/dynamoDB/retrieveData:
-   *   get:
-   *     tags:
-   *       - DynamoDB
-   *     summary: Get posts data
-   *     parameters:
-   *       - name: type
-   *         in: query
-   *         required: false
-   *         description: The type of the proposal
-   *         schema:
-   *           type: string
-   *       - name: subType
-   *         in: query
-   *         required: false
-   *         description: The subType of the proposal
-   *         schema:
-   *           type: string
-   *       - name: postId
-   *         in: query
-   *         required: false
-   *         description: The ID of the post
-   *         schema:
-   *           type: string
-   *       - name: category
-   *         in: query
-   *         required: false
-   *         description: The category of the post
-   *         schema:
-   *           type: string
-   *       - name: submitter
-   *         in: query
-   *         required: false
-   *         description: The submitter of the post
-   *         schema:
-   *           type: string
-   *       - name: date
-   *         in: query
-   *         required: false
-   *         description: The date specified
-   *         schema:
-   *           type: string
-   *       - name: dateDifference
-   *         in: query
-   *         required: false
-   *         description: The dateDifference diff
-   *         schema:
-   *           type: string
-   *     responses:
-   *       200:
-   *         description: Successfully retrieved the file
-   *         content:
-   *           application/octet-stream:
-   *             schema:
-   *               type: object
-   *               format: binary
-   *       404:
-   *         description: Files not found
-   *       500:
-   *         description: Internal server error
-   */
+/**
+ * @swagger
+ * /api/dynamoDB/retrieveData:
+ *   get:
+ *     tags:
+ *       - DynamoDB
+ *     summary: Get posts data
+ *     parameters:
+ *       - name: postId
+ *         in: query
+ *         required: false
+ *         description: The ID of the post
+ *         schema:
+ *           type: string
+ *       - name: type
+ *         in: query
+ *         required: false
+ *         description: The type of the proposal
+ *         schema:
+ *           type: string
+ *       - name: subType
+ *         in: query
+ *         required: false
+ *         description: The subType of the proposal
+ *         schema:
+ *           type: string
+ *       - name: category
+ *         in: query
+ *         required: false
+ *         description: The category of the post
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *       - name: requestedAmount
+ *         in: query
+ *         required: false
+ *         description: The requested amount for the post
+ *         schema:
+ *           type: string
+ *       - name: requestedAmountOperator
+ *         in: query
+ *         required: false
+ *         description: The operator for requested amount comparison
+ *         schema:
+ *           type: string
+ *       - name: reward
+ *         in: query
+ *         required: false
+ *         description: The reward associated with the post
+ *         schema:
+ *           type: string
+ *       - name: rewardOperator
+ *         in: query
+ *         required: false
+ *         description: The operator for reward comparison
+ *         schema:
+ *           type: string
+ *       - name: submitter
+ *         in: query
+ *         required: false
+ *         description: The submitter of the post
+ *         schema:
+ *           type: string
+ *       - name: startDate
+ *         in: query
+ *         required: false
+ *         description: The start date for filtering posts
+ *         schema:
+ *           type: string
+ *       - name: endDate
+ *         in: query
+ *         required: false
+ *         description: The end date for filtering posts
+ *         schema:
+ *           type: string
+ *       - name: vectorFileId
+ *         in: query
+ *         required: false
+ *         description: The ID of the vector file
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved the file
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: object
+ *               format: binary
+ *       404:
+ *         description: Files not found
+ *       500:
+ *         description: Internal server error
+ */
   @httpGet("/retrieveData")
   async retrieveData(
     @response() res: Response,

@@ -65,6 +65,8 @@ export class GoogleServices {
         );
       }
 
+      console.log("Google File found , fileId:", fileId);;
+
       const fileStream = new Stream.PassThrough();
       response.data.pipe(fileStream);
 
@@ -76,7 +78,7 @@ export class GoogleServices {
         "application/docx"
       );
     } catch (error) {
-      console.error("Error uploading file:", error);
+      console.error("Error failed to download file and uploading it:", error.response);
     }
   }
 

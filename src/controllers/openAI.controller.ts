@@ -19,23 +19,35 @@ import { OpenAIService } from "../services/openAI.service";
 import { ResponseWrapperCode } from "../services/responseWrapper.service";
 
 import { Uploadable, toFile } from "openai/uploads";
-import { processInBatches } from "../helpers/utilsFunctions.helper";
+import {
+  processInBatches,
+  mapWithConcurrency,
+} from "../helpers/utilsFunctions.helper";
+
+if (!process.env.UPLOAD_FILES_BATCH_SIZE_AI_VECTOR_STORE) {
+  throw Error("UPLOAD_FILES_BATCH_SIZE_AI_VECTOR_STORE missing");
+}
 
 // const upload = multer();
 
 @controller("/api/openAI")
 export class OpenAIController extends BaseHttpController {
+  private batchSize: number;
+
   constructor(
     @inject("AwsStorageService") private awsStorageService: AwsStorageService,
     @inject("OpenAIService") private openAIService: OpenAIService
   ) {
     super();
+    this.batchSize = parseInt(
+      process.env.UPLOAD_FILES_BATCH_SIZE_AI_VECTOR_STORE
+    );
   }
 
   async _getFile(fileId: string) {
     try {
       const fileResponse = await this.openAIService.getFile(fileId);
-      
+
       return fileResponse;
     } catch (err) {
       console.log("Error - _getFile: ", err);
@@ -51,22 +63,19 @@ export class OpenAIController extends BaseHttpController {
 
       const allAssistantsFiles = [];
 
-      if(assistantsFilesInit){
-        
+      if (assistantsFilesInit) {
         if (assistantsFilesInit.data.length > 0) {
           allAssistantsFiles.push(...assistantsFilesInit.data);
           let hasNextPage = assistantsFilesInit.hasNextPage();
           let nextPageParams = assistantsFilesInit.nextPageParams();
           console.log("nextPageParams", nextPageParams);
-          
-          
+
           while (hasNextPage && nextPageParams?.after) {
             console.log("allAssistantsFiles", allAssistantsFiles.length);
 
-            const assistantsFiles =
-              await this.openAIService.listFiles({
-                purpose: "assistants",
-              });
+            const assistantsFiles = await this.openAIService.listFiles({
+              purpose: "assistants",
+            });
 
             if (assistantsFiles.data.length > 0) {
               allAssistantsFiles.push(...assistantsFiles.data);
@@ -75,7 +84,6 @@ export class OpenAIController extends BaseHttpController {
             hasNextPage = assistantsFiles.hasNextPage();
             nextPageParams = assistantsFiles.nextPageParams();
           }
-
         }
       }
 
@@ -96,7 +104,6 @@ export class OpenAIController extends BaseHttpController {
       const allVectorStoreFiles = [];
 
       if (vectorStoreFilesInit) {
-
         if (vectorStoreFilesInit.data.length > 0) {
           allVectorStoreFiles.push(...vectorStoreFilesInit.data);
           let hasNextPage = vectorStoreFilesInit.hasNextPage();
@@ -116,12 +123,11 @@ export class OpenAIController extends BaseHttpController {
             hasNextPage = vectorStoreFiles.hasNextPage();
             nextPageParams = vectorStoreFiles.nextPageParams();
           }
-          
         }
       }
 
-      for(const file of allVectorStoreFiles){
-        await this.openAIService.deleteVectorStoreFile(file.id)
+      for (const file of allVectorStoreFiles) {
+        await this.openAIService.deleteVectorStoreFile(file.id);
       }
 
       return allVectorStoreFiles;
@@ -144,26 +150,44 @@ export class OpenAIController extends BaseHttpController {
   async _uploadFilesToOpenAIVectorStore(keysAndNames) {
     try {
       const fileDataArray: Uploadable[] = [];
-      for (const keyAndName of keysAndNames) {
-        const file = await this.awsStorageService.getFile(keyAndName.key);
-        if (file && file.Body) {
-          if (!(file.Body instanceof Readable)) {
-            console.log("S3 Response body invalid");
+
+      await mapWithConcurrency(
+        keysAndNames,
+        async (keyAndName: { key: string; name: string }) => {
+          const filePromise = this.awsStorageService.getFile(keyAndName.key);
+          
+          const [file] = await Promise.all([filePromise]);
+          if (file && file.Body) {
+            if (!(file.Body instanceof Readable)) {
+              console.log("S3 Response body invalid");
+            }
+            const blobLikePromise = toFile(
+              file.Body as Readable,
+              keyAndName.name,
+              { type: "application/octet-stream" }
+            );
+            const [blobLike] = await Promise.all([blobLikePromise]);
+            fileDataArray.push(blobLike);
           }
+        },
+        50
+      );
 
-          const blobLike = await toFile(
-            file.Body as Readable,
-            keyAndName.name,
-            { type: "application/octet-stream" }
-          );
-          fileDataArray.push(blobLike);
-        }
-      }
+      console.log(
+        "Number of files to be uploaded To OpenAI VectorStore:",
+        fileDataArray.length      );
 
-      console.log(fileDataArray.length);
+      // optimization is getting to much data to fast
+      // const batchUploadPromises = [];
+      // for (let i = 0; i < fileDataArray.length; i += this.batchSize) {
+      //   const batch = fileDataArray.slice(i, i + this.batchSize);
+      //   batchUploadPromises.push(
+      //     this.openAIService.uploadFilesToOpenAIVectorStore({ files: batch })
+      //   );
+      // }
+      // await Promise.all(batchUploadPromises);
 
-      //update batch size from env
-      await processInBatches(fileDataArray, 10, async (batch) => {
+      await processInBatches(fileDataArray, this.batchSize, async (batch) => {
         await this.openAIService.uploadFilesToOpenAIVectorStore({
           files: batch,
         });

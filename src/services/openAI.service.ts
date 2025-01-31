@@ -54,10 +54,8 @@ export class OpenAIService {
 
   async getFile(fileId: string) {
     try {
-      const response = await this.openai.files.retrieve(
-        fileId
-      );
-      
+      const response = await this.openai.files.retrieve(fileId);
+
       return response;
     } catch (error) {
       console.error("Error List Files:", error);
@@ -67,10 +65,8 @@ export class OpenAIService {
 
   async listFiles(params: FileListParams) {
     try {
-      const response = await this.openai.files.list(
-        params
-      );
-      
+      const response = await this.openai.files.list(params);
+
       return response;
     } catch (error) {
       console.error("Error List Files:", error);
@@ -84,7 +80,7 @@ export class OpenAIService {
         this.vectorStoreId,
         params
       );
-      
+
       return response;
     } catch (error) {
       console.error("Error List Vector Store Files files:", error);
@@ -112,6 +108,8 @@ export class OpenAIService {
           this.vectorStoreId,
           filesData
         );
+      console.log("Vector store uploadAndPoll response:", response);
+      return response;
     } catch (error) {
       console.error("Error uploading files to OpenAI vector store:", error);
       return null;

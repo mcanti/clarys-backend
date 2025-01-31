@@ -113,8 +113,8 @@ export class PolkassemblyController extends BaseHttpController {
 
       return result;
     } catch (err) {
-      console.log("Error - _findOnChainPost: ", err);
-      throw Error("_findOnChainPost failed");
+      console.log("Error - _findOnChainPost failed: ", err);
+      return null;
     }
   }
 
@@ -194,10 +194,9 @@ export class PolkassemblyController extends BaseHttpController {
                 delete post.spam_users_count;
               }
 
-              if(post?.allChildBounties){
+              if (post?.allChildBounties) {
                 delete post.allChildBounties;
               }
-
             });
             allPosts = [...allPosts, ...responseBatch.posts];
           }
@@ -241,7 +240,10 @@ export class PolkassemblyController extends BaseHttpController {
 
         postsWithCategories.push({
           ...post,
-          categories: categories.length > 0 ? [...new Set(categories)]: [...new Set(['Miscellaneous'])],
+          categories:
+            categories.length > 0
+              ? [...new Set(categories)]
+              : [...new Set(["Miscellaneous"])],
         });
       });
 
@@ -258,9 +260,8 @@ export class PolkassemblyController extends BaseHttpController {
         typeof storedList === "string" ||
         (storedList &&
           storedList?.count &&
-          storedList.count !== postsWithCategories.length)
+          postsWithCategories.length > storedList.count)
       ) {
-        
         buffer = Buffer.from(
           JSON.stringify({
             modifiedPostsIds: [],
@@ -274,8 +275,7 @@ export class PolkassemblyController extends BaseHttpController {
           `${folder}/${proposalType}-List.json`,
           "application/json"
         );
-
-      } else {
+      } else if (postsWithCategories.length > 0) {
         if (storedList?.posts) {
           storedList.posts.forEach((post) => {
             postsWithCategories.forEach((newPost) => {
@@ -327,7 +327,6 @@ export class PolkassemblyController extends BaseHttpController {
           posts: postsWithCategories,
         },
       };
-
     } catch (err) {
       console.log("Error - _findOnChainPosts: ", err);
       throw Error("_findOnChainPosts failed");
@@ -380,10 +379,8 @@ export class PolkassemblyController extends BaseHttpController {
       });
 
       if (filesIds.length) {
-        await Promise.all(
+        await Promise.allSettled(
           filesIds.map(async (fileId) => {
-            console.log("fileId: ", fileId);
-
             await this.googleService.uploadGoogleDocToS3(fileId, folderDocs);
           })
         );
@@ -494,7 +491,7 @@ export class PolkassemblyController extends BaseHttpController {
         typeof storedList === "string" ||
         (storedList &&
           storedList?.count &&
-          storedList.count !== postsWithCategories.length)
+          postsWithCategories.length > storedList.count)
       ) {
         buffer = Buffer.from(
           JSON.stringify({
@@ -509,7 +506,6 @@ export class PolkassemblyController extends BaseHttpController {
           `${folder}/${proposalType}-List.json`,
           "application/json"
         );
-
       }
 
       return {

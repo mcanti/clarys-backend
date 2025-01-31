@@ -33,7 +33,7 @@ export class DotEventsController extends BaseHttpController {
     @inject("DotEventsService")
     private dotEventsService: DotEventsService,
     @inject("AwsStorageService") private awsStorageService: AwsStorageService,
-    @inject("S3Controller") private s3Controller: S3Controller,
+    @inject("S3Controller") private s3Controller: S3Controller
   ) {
     super();
   }
@@ -46,30 +46,30 @@ export class DotEventsController extends BaseHttpController {
       const response = await this.dotEventsService.SubmissionsEvents();
 
       let result = {
-        events:[],
-        subEvents:[]
+        events: [],
+        subEvents: [],
       };
 
       if (response && response?.board_data) {
         let eventsList = [];
         let subEventsList = [];
 
-        if(response.board_data?.pulses){
-          response.board_data.pulses.forEach((pulse)=>{
+        if (response.board_data?.pulses) {
+          response.board_data.pulses.forEach((pulse) => {
             eventsList.push({
               ...pulse,
-              categories:['Events']
-            })
-          })
+              categories: ["Events"],
+            });
+          });
         }
 
-        if(response.board_data?.linked_pulses){
-          response.board_data.linked_pulses.forEach((linked_pulse)=>{
+        if (response.board_data?.linked_pulses) {
+          response.board_data.linked_pulses.forEach((linked_pulse) => {
             subEventsList.push({
               ...linked_pulse,
-              categories:['Events', 'SubEvents']
-            })
-          })
+              categories: ["Events", "SubEvents"],
+            });
+          });
         }
 
         result = {
@@ -77,7 +77,6 @@ export class DotEventsController extends BaseHttpController {
           subEvents: subEventsList,
         };
       }
-
 
       //events
       const storedEventsList = await this.s3Controller._s3GetFile(
@@ -93,7 +92,7 @@ export class DotEventsController extends BaseHttpController {
         typeof storedEventsList === "string" ||
         (storedEventsList &&
           storedEventsList?.count &&
-          storedEventsList.count !== result.events.length)
+          result.events.length > storedEventsList.count)
       ) {
         bufferEvents = Buffer.from(
           JSON.stringify({
@@ -108,7 +107,7 @@ export class DotEventsController extends BaseHttpController {
           `${folder}/${eventsFileName}`,
           "application/json"
         );
-      } else {
+      } else if (result.events.length > 0) {
         if (storedEventsList?.posts) {
           storedEventsList.posts.forEach((post) => {
             result.events.forEach((newPost) => {
@@ -119,7 +118,10 @@ export class DotEventsController extends BaseHttpController {
                 post?.last_updated_data &&
                 newPost.id === post.id
               ) {
-                if (newPost.last_updated_data?.last_updated_at != post.last_updated_data?.last_updated_at) {
+                if (
+                  newPost.last_updated_data?.last_updated_at !=
+                  post.last_updated_data?.last_updated_at
+                ) {
                   modifiedEventsPostsIds.push(newPost.post_id);
                 }
               }
@@ -135,11 +137,12 @@ export class DotEventsController extends BaseHttpController {
               })
             );
 
-            uploadedEventsFileToS3 = await this.awsStorageService.uploadFilesToS3(
-              bufferEvents,
-              `${folder}/${eventsFileName}`,
-              "application/json"
-            );
+            uploadedEventsFileToS3 =
+              await this.awsStorageService.uploadFilesToS3(
+                bufferEvents,
+                `${folder}/${eventsFileName}`,
+                "application/json"
+              );
           }
         }
       }
@@ -158,7 +161,7 @@ export class DotEventsController extends BaseHttpController {
         typeof storedSubEventsList === "string" ||
         (storedSubEventsList &&
           storedSubEventsList?.count &&
-          storedSubEventsList.count !== result.subEvents.length)
+          result.subEvents.length > storedSubEventsList.count)
       ) {
         bufferSubEvents = Buffer.from(
           JSON.stringify({
@@ -168,12 +171,13 @@ export class DotEventsController extends BaseHttpController {
           })
         );
 
-        uploadedSubEventsFileToS3 = await this.awsStorageService.uploadFilesToS3(
-          bufferSubEvents,
-          `${folder}/${subEventsFileName}`,
-          "application/json"
-        );
-      } else {
+        uploadedSubEventsFileToS3 =
+          await this.awsStorageService.uploadFilesToS3(
+            bufferSubEvents,
+            `${folder}/${subEventsFileName}`,
+            "application/json"
+          );
+      } else if (result.subEvents.length > 0) {
         if (storedSubEventsList?.posts) {
           storedSubEventsList.posts.forEach((post) => {
             result.subEvents.forEach((newPost) => {
@@ -184,7 +188,10 @@ export class DotEventsController extends BaseHttpController {
                 post?.last_updated_data &&
                 newPost.id === post.id
               ) {
-                if (newPost.last_updated_data?.last_updated_at != post.last_updated_data?.last_updated_at) {
+                if (
+                  newPost.last_updated_data?.last_updated_at !=
+                  post.last_updated_data?.last_updated_at
+                ) {
                   modifiedSubEventsPostsIds.push(newPost.post_id);
                 }
               }
@@ -200,31 +207,38 @@ export class DotEventsController extends BaseHttpController {
               })
             );
 
-            uploadedSubEventsFileToS3 = await this.awsStorageService.uploadFilesToS3(
-              bufferSubEvents,
-              `${folder}/${subEventsFileName}`,
-              "application/json"
-            );
+            uploadedSubEventsFileToS3 =
+              await this.awsStorageService.uploadFilesToS3(
+                bufferSubEvents,
+                `${folder}/${subEventsFileName}`,
+                "application/json"
+              );
           }
         }
       }
 
       return {
-        uploadEventsFileToS3: uploadedEventsFileToS3 != undefined ? true : false,
-        s3EventsResponse: uploadedEventsFileToS3 != undefined ? uploadedEventsFileToS3 : null,
-        uploadSubEventsFileToS3: uploadedSubEventsFileToS3 != undefined ? true : false,
-        s3SubEventsResponse: uploadedSubEventsFileToS3 != undefined ? uploadedSubEventsFileToS3 : null,
+        uploadEventsFileToS3:
+          uploadedEventsFileToS3 != undefined ? true : false,
+        s3EventsResponse:
+          uploadedEventsFileToS3 != undefined ? uploadedEventsFileToS3 : null,
+        uploadSubEventsFileToS3:
+          uploadedSubEventsFileToS3 != undefined ? true : false,
+        s3SubEventsResponse:
+          uploadedSubEventsFileToS3 != undefined
+            ? uploadedSubEventsFileToS3
+            : null,
         data: {
-          events:{
+          events: {
             modifiedPostsIds: modifiedEventsPostsIds,
             count: result.events.length,
             posts: result.events,
           },
-          subEvents:{
+          subEvents: {
             modifiedPostsIds: modifiedSubEventsPostsIds,
             count: result.subEvents.length,
             posts: result.subEvents,
-          }
+          },
         },
       };
     } catch (err) {

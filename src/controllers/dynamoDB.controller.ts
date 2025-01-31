@@ -25,6 +25,8 @@ import {
 import { eventsTypeList, proposalTypeList } from "../constants/proposalTypes";
 
 import { streamToString } from "../helpers/streamToStringHelper";
+import { findGoogleDocsLinks } from "../helpers/googleDocsLinksFinder.helper";
+import { findGoogleDriveDocsLinks } from "../helpers/googleDriveDocsLinksFinder.helper";
 
 @controller("/api/dynamoDB")
 export class DynamoDBController extends BaseHttpController {
@@ -50,7 +52,6 @@ export class DynamoDBController extends BaseHttpController {
 
   async _addDataToDynamoDBTable() {
     try {
-      const tableNames = [];
       const dataAddedToTables = [];
 
       for (const postsType of PostsTypes) {
@@ -59,181 +60,360 @@ export class DynamoDBController extends BaseHttpController {
           `${postsType}/`
         );
 
-        folderPaths.forEach((path) => {
-          const folderName = path.replace(`${postsType}/`, "").replace("/", "");
-          tableNames.push(folderName);
-        });
+        const tableNames = folderPaths.map((path) =>
+          path.replace(`${postsType}/`, "").replace("/", "")
+        );
 
-        for (const tableName of tableNames) {
-          if (tableName === "events") {
-            const data = { tableName: tableName, addedData: [] };
-            for (const eventsType of eventsTypeList) {
-              const response = await this.awsStorageService.getFile(
-                `${postsType}/${tableName}/${eventsType}-List.json`
-              );
+        await Promise.all(
+          tableNames.map(async (tableName) => {
+            const isEventsTable = tableName === "events";
+            const data = { tableName, addedData: [] };
+            const eventTypes = isEventsTable ? eventsTypeList : [tableName];
 
-              if (!response) {
-                return null;
-              }
+            for (const eventType of eventTypes) {
+              const fileKey = `${postsType}/${tableName}/${eventType}-List.json`;
+              const response = await this.awsStorageService.getFile(fileKey);
 
-              if (response && !response.Body) {
-                return `File with key ${postsType}/${tableName}/${tableName}-List.json not found in S3`;
+              if (!response || !response?.Body) {
+                console.warn(`File not found: ${fileKey}`);
+                continue;
               }
 
               const jsonData = await streamToString(response.Body as Readable);
               const parsedData = JSON.parse(jsonData);
+              if (!parsedData.posts) continue;
 
-              if (parsedData.posts) {
-                for (let index = 0; index < parsedData.posts.length; index++) {
-                  const postIdExtracted = postsType === "OnChainPosts"
-                ? parsedData.posts[index].post_id.toString()
-                : parsedData.posts[index].id
-                ? parsedData.posts[index].id.toString()
-                : `index-${index}`;
-                const addedItem = await this.awsDynamoDBService.addItemToTable(
-                  tableName,
-                  {
-                    postId:postIdExtracted,
-                    creationDate:
-                      postsType === "OnChainPosts"
-                        ? parsedData.posts[index].timeline[0].created_at
-                        : parsedData.posts[index].created_at
-                        ? parsedData.posts[index].created_at
-                        : parsedData.posts[index].submissionDate
-                        ? parsedData.posts[index].submissionDate
-                        : "",
-                    type:
-                      tableName === "referendums_v2" || tableName === "tips"
-                        ? "proposal"
-                        : tableName,
-                    subType: parsedData.posts[index].track_no
-                      ? proposalSubType[parsedData.posts[index].track_no]
-                      : "",
-                    categories: parsedData.posts[index].categories,
-                    requestedAmount: parsedData.posts[index].requestedAmount
-                      ? parsedData.posts[index].requestedAmount.toString()
-                      : parsedData.posts[index].amount
-                      ? parsedData.posts[index].amount.toString()
-                      : "",
-                    reward: parsedData.posts[index].reward ? parsedData.posts[index].reward.toString() : "",
-                    submitter: parsedData.posts[index].proposer
-                      ? parsedData.posts[index].proposer
-                      : parsedData.posts[index].created_by
-                      ? parsedData.posts[index].created_by.toString()
-                      : parsedData.posts[index].username ? parsedData.posts[index].username  : "",
-                    vectorFileId: "",
-                    post: parsedData.posts[index],
+              const addedItems = await Promise.all(
+                parsedData.posts.map(async (post, index) => {
+                  const postId =
+                    post.post_id?.toString() ||
+                    post.id?.toString() ||
+                    `index-${index}`;
+                  let jsonPostKey;
+
+                  if (postsType === "OnChainPosts") {
+                    jsonPostKey = `OnChainPost/${tableName}/${postId}/#${postId}.json`;
+                  } else if (postsType === "OffChainPosts") {
+                    if (isEventsTable) {
+                      jsonPostKey = `OffChainPost/${tableName}/${eventType}/${postId}/#${postId}.json`;
+                    } else {
+                      jsonPostKey = `OffChainPost/${tableName}/${postId}/#${postId}.json`;
+                    }
                   }
-                );
-                  if (addedItem) {
-                    data.addedData.push(addedItem);
+
+                  let jsonPost = null;
+                  const docsLinks = [];
+
+                  const jsonPostResponse = await this.awsStorageService.getFile(
+                    jsonPostKey
+                  );
+
+                  if (!jsonPostResponse || !response?.Body) {
+                    console.warn(`File not found: ${jsonPostKey}`);
                   } else {
-                    data.addedData.push({postIdExtracted:null});
+                    const jsonPostData = await streamToString(
+                      jsonPostResponse.Body as Readable
+                    );
+                    jsonPost = JSON.parse(jsonPostData);
+
+                    const docsLinks = [];
+                    if (jsonPost?.content) {
+                      const googleDocsLinks = findGoogleDocsLinks(
+                        jsonPost.content
+                      );
+                      const googleDriveLinks = findGoogleDriveDocsLinks(
+                        jsonPost.content
+                      );
+                      docsLinks.push(...googleDocsLinks);
+                      docsLinks.push(...googleDriveLinks);
+                    }
+                    if (
+                      jsonPost?.proposalFolderlLink ||
+                      jsonPost?.reportFolderLink
+                    ) {
+                      if (Array.isArray(typeof jsonPost.proposalFolderlLink)) {
+                        docsLinks.push(...jsonPost.proposalFolderlLink);
+                      } else {
+                        docsLinks.push(jsonPost.proposalFolderlLink);
+                      }
+                      if (Array.isArray(typeof jsonPost.reportFolderLink)) {
+                        docsLinks.push(...jsonPost.reportFolderLink);
+                      } else {
+                        docsLinks.push(jsonPost.reportFolderLink);
+                      }
+                    }
+                    if (jsonPost?.column_values?.google_doc__1?.url) {
+                      if (
+                        Array.isArray(jsonPost.column_values.google_doc__1.url)
+                      ) {
+                        docsLinks.push(
+                          ...jsonPost.column_values.google_doc__1.url
+                        );
+                      } else {
+                        docsLinks.push(
+                          jsonPost.column_values.google_doc__1.url
+                        );
+                      }
+                    }
+                    if (jsonPost?.column_values?.link__1?.url) {
+                      if (Array.isArray(jsonPost.column_values.link__1.url)) {
+                        docsLinks.push(...jsonPost.column_values.link__1.url);
+                      } else {
+                        docsLinks.push(jsonPost.column_values.link__1.url);
+                      }
+                    }
                   }
-                }
-              }
-            }
-            dataAddedToTables.push(data);
-          } else {
-            const response = await this.awsStorageService.getFile(
-              `${postsType}/${tableName}/${tableName}-List.json`
-            );
 
-            if (!response) {
-              return null;
-            }
+                  const creationDate =
+                    post.timeline?.[0]?.created_at ||
+                    post.created_at ||
+                    post.submissionDate ||
+                    "";
+                  const subType = post.track_no
+                    ? proposalSubType[post.track_no]
+                    : "";
+                  const requestedAmount =
+                    post.requestedAmount?.toString() ||
+                    post.amount?.toString() ||
+                    "";
+                  const submitter =
+                    post.proposer ||
+                    post.created_by?.toString() ||
+                    post.username ||
+                    "";
 
-            if (response && !response.Body) {
-              return `File with key ${postsType}/${tableName}/${tableName}-List.json not found in S3`;
-            }
-
-            const jsonData = await streamToString(response.Body as Readable);
-            const parsedData = JSON.parse(jsonData);
-
-            const data = { tableName: tableName, addedData: [] };
-
-            if (parsedData.posts) {
-              for (let index = 0; index < parsedData.posts.length; index++) {
-                const postIdExtracted = postsType === "OnChainPosts"
-                ? parsedData.posts[index].post_id.toString()
-                : parsedData.posts[index].id
-                ? parsedData.posts[index].id.toString()
-                : `index-${index}`;
-                const addedItem = await this.awsDynamoDBService.addItemToTable(
-                  tableName,
-                  {
-                    postId:postIdExtracted,
-                    creationDate:
-                      postsType === "OnChainPosts"
-                        ? parsedData.posts[index].timeline[0].created_at
-                        : parsedData.posts[index].created_at
-                        ? parsedData.posts[index].created_at
-                        : parsedData.posts[index].submissionDate
-                        ? parsedData.posts[index].submissionDate
-                        : "",
+                  return this.awsDynamoDBService.addItemToTable(tableName, {
+                    postId,
+                    creationDate,
                     type:
                       tableName === "referendums_v2" || tableName === "tips"
                         ? "proposal"
                         : tableName,
-                    subType: parsedData.posts[index].track_no
-                      ? proposalSubType[parsedData.posts[index].track_no]
-                      : "",
-                    categories: parsedData.posts[index].categories,
-                    requestedAmount: parsedData.posts[index].requestedAmount
-                      ? parsedData.posts[index].requestedAmount.toString()
-                      : parsedData.posts[index].amount
-                      ? parsedData.posts[index].amount.toString()
-                      : "",
-                    reward: parsedData.posts[index].reward ? parsedData.posts[index].reward.toString() : "",
-                    submitter: parsedData.posts[index].proposer
-                      ? parsedData.posts[index].proposer
-                      : parsedData.posts[index].created_by
-                      ? parsedData.posts[index].created_by.toString()
-                      : parsedData.posts[index].username ? parsedData.posts[index].username  : "",
+                    subType,
+                    categories: post.categories || [],
+                    requestedAmount,
+                    reward: post.reward?.toString() || "",
+                    submitter,
+                    docsLinks,
                     vectorFileId: "",
-                    post: parsedData.posts[index],
-                  }
-                );
+                    post: jsonPost ? jsonPost : post,
+                  });
+                })
+              );
 
-                if (addedItem) {
-                  data.addedData.push(addedItem);
-                } else {
-                  data.addedData.push({postIdExtracted: null});
-                }
-              }
+              data.addedData.push(...addedItems.filter(Boolean));
             }
 
             dataAddedToTables.push(data);
-          }
-        }
+          })
+        );
       }
 
-      return { dataAddedToTables: dataAddedToTables };
+      console.log("Items added into DB");
+      
+      return { dataAddedToTables };
     } catch (err) {
-      console.error("Error - _addDataToDynamoDBTable: ", err);
+      console.error("Error - _addDataToDynamoDBTable:", err);
       return null;
     }
   }
 
   async _updateDataToDynamoDBTable() {
     try {
+      const dataUpdatedInTables = [];
 
+      for (const postsType of PostsTypes) {
+        const folderPaths = await this.awsStorageService.listFilesAndFolders(
+          "folders",
+          `${postsType}/`
+        );
 
+        const tableNames = folderPaths.map((path) =>
+          path.replace(`${postsType}/`, "").replace("/", "")
+        );
+
+        await Promise.all(
+          tableNames.map(async (tableName) => {
+            const isEventsTable = tableName === "events";
+            const data = { tableName, updatedData: [] };
+            const eventTypes = isEventsTable ? eventsTypeList : [tableName];
+
+            for (const eventType of eventTypes) {
+              const fileKey = `${postsType}/${tableName}/${eventType}-List.json`;
+              const response = await this.awsStorageService.getFile(fileKey);
+
+              if (!response || !response.Body) {
+                console.warn(`File not found: ${fileKey}`);
+                continue;
+              }
+
+              const jsonData = await streamToString(response.Body as Readable);
+              const parsedData = JSON.parse(jsonData);
+              if (!parsedData.posts) continue;
+
+              const modifiedPosts = [];
+              if (parsedData?.modifiedPostsIds.length > 0) {
+                parsedData.posts((post) => {
+                  if (
+                    parsedData.modifiedPostsIds.contains(post?.post_id) ||
+                    parsedData.modifiedPostsIds.contains(post?.id)
+                  ) {
+                    return post;
+                  }
+                });
+              }
+
+              const updatedItems = await Promise.all(
+                modifiedPosts.map(async (post, index) => {
+                  const postId =
+                    post.post_id?.toString() ||
+                    post.id?.toString() ||
+                    `index-${index}`;
+                  let jsonPostKey;
+
+                  if (postsType === "OnChainPosts") {
+                    jsonPostKey = `OnChainPost/${tableName}/${postId}/#${postId}.json`;
+                  } else if (postsType === "OffChainPosts") {
+                    if (isEventsTable) {
+                      jsonPostKey = `OffChainPost/${tableName}/${eventType}/${postId}/#${postId}.json`;
+                    } else {
+                      jsonPostKey = `OffChainPost/${tableName}/${postId}/#${postId}.json`;
+                    }
+                  }
+
+                  let jsonPost = null;
+                  const docsLinks = [];
+                  const jsonPostResponse = await this.awsStorageService.getFile(
+                    jsonPostKey
+                  );
+                  if (!jsonPostResponse || !jsonPostResponse?.Body) {
+                    console.warn(`File not found: ${jsonPostKey}`);
+                  } else {
+                    const jsonPostData = await streamToString(
+                      jsonPostResponse.Body as Readable
+                    );
+
+                    jsonPost = JSON.parse(jsonPostData);
+
+                    if (jsonPost?.content) {
+                      const googleDocsLinks = findGoogleDocsLinks(
+                        jsonPost.content
+                      );
+                      const googleDriveLinks = findGoogleDriveDocsLinks(
+                        jsonPost.content
+                      );
+                      docsLinks.push(...googleDocsLinks);
+                      docsLinks.push(...googleDriveLinks);
+                    }
+                    if (
+                      jsonPost?.proposalFolderlLink ||
+                      jsonPost?.reportFolderLink
+                    ) {
+                      if (Array.isArray(typeof jsonPost.proposalFolderlLink)) {
+                        docsLinks.push(...jsonPost.proposalFolderlLink);
+                      } else {
+                        docsLinks.push(jsonPost.proposalFolderlLink);
+                      }
+                      if (Array.isArray(typeof jsonPost.reportFolderLink)) {
+                        docsLinks.push(...jsonPost.reportFolderLink);
+                      } else {
+                        docsLinks.push(jsonPost.reportFolderLink);
+                      }
+                    }
+                    if (jsonPost?.column_values?.google_doc__1?.url) {
+                      if (
+                        Array.isArray(jsonPost.column_values.google_doc__1.url)
+                      ) {
+                        docsLinks.push(
+                          ...jsonPost.column_values.google_doc__1.url
+                        );
+                      } else {
+                        docsLinks.push(
+                          jsonPost.column_values.google_doc__1.url
+                        );
+                      }
+                    }
+                    if (jsonPost?.column_values?.link__1?.url) {
+                      if (Array.isArray(jsonPost.column_values.link__1.url)) {
+                        docsLinks.push(...jsonPost.column_values.link__1.url);
+                      } else {
+                        docsLinks.push(jsonPost.column_values.link__1.url);
+                      }
+                    }
+                  }
+
+                  const creationDate =
+                    post.timeline?.[0]?.created_at ||
+                    post.created_at ||
+                    post.submissionDate ||
+                    "";
+                  const subType = post.track_no
+                    ? proposalSubType[post.track_no]
+                    : "";
+                  const requestedAmount =
+                    post.requestedAmount?.toString() ||
+                    post.amount?.toString() ||
+                    "";
+                  const submitter =
+                    post.proposer ||
+                    post.created_by?.toString() ||
+                    post.username ||
+                    "";
+
+                  const updateResponse =
+                    await this.awsDynamoDBService.updateItemIntoTable(
+                      tableName,
+                      {
+                        postId,
+                        creationDate,
+                        type:
+                          tableName === "referendums_v2" || tableName === "tips"
+                            ? "proposal"
+                            : tableName,
+                        subType,
+                        categories: post.categories || [],
+                        requestedAmount,
+                        reward: post.reward?.toString() || "",
+                        submitter,
+                        docsLinks,
+                        vectorFileId: "",
+                        post: jsonPost ? jsonPost : post,
+                      }
+                    );
+
+                  return updateResponse;
+                })
+              );
+
+              data.updatedData.push(...updatedItems.filter(Boolean));
+            }
+
+            dataUpdatedInTables.push(data);
+          })
+        );
+      }
+
+      return { dataUpdatedInTables };
     } catch (err) {
-     
+      console.error("Error - _updateDataToDynamoDBTable:", err);
+      return null;
     }
   }
 
-  async _getPostsData(filters: {postId: string,
-    type: string,
-            subType: string,
-            category: string,
-            requestedAmount: string,
-            reward: string,
-            submitter: string,
-            date: string,
-            dateDifference: string,
-            vectorFileId: string}) {
+  async _retrieveData(filters: {
+    postId: string;
+    type: string;
+    subType: string;
+    category: string[];
+    requestedAmount: string;
+    requestedAmountOperator: string;
+    reward: string;
+    rewardOperator: string;
+    submitter: string;
+    startDate: string;
+    endDate: string;
+    vectorFileId: string;
+  }) {
     try {
       let response = [];
 
@@ -242,10 +422,11 @@ export class DynamoDBController extends BaseHttpController {
           for (const proposalType of proposalTypes) {
             console.log("proposalType", proposalType);
 
-            const porposalResponse = await this.awsDynamoDBService.getFilteredPosts(
-              proposalType,
-              filters
-            );
+            const porposalResponse =
+              await this.awsDynamoDBService.getFilteredPosts(
+                proposalType,
+                filters
+              );
 
             response = [...response, ...porposalResponse];
           }
@@ -265,14 +446,16 @@ export class DynamoDBController extends BaseHttpController {
             "folders",
             `${postsType}/`
           );
-  
+
           folderPaths.forEach((path) => {
-            const folderName = path.replace(`${postsType}/`, "").replace("/", "");
+            const folderName = path
+              .replace(`${postsType}/`, "")
+              .replace("/", "");
             tableNames.push(folderName);
           });
         }
 
-        for(const tableName of tableNames){
+        for (const tableName of tableNames) {
           const postsResponse = await this.awsDynamoDBService.getFilteredPosts(
             tableName,
             filters
@@ -280,7 +463,6 @@ export class DynamoDBController extends BaseHttpController {
           response = [...response, ...postsResponse];
         }
       }
-      
 
       return response;
     } catch (err) {
@@ -400,7 +582,7 @@ export class DynamoDBController extends BaseHttpController {
     }
   }
 
-    /**
+  /**
    * @swagger
    * /api/dynamoDB/updateDataToDynamoDBTable:
    *   post:
@@ -424,30 +606,30 @@ export class DynamoDBController extends BaseHttpController {
    *       500:
    *         description: Internal server error
    */
-    @httpPost("/updateDataToDynamoDBTable")
-    async updateDataToDynamoDBTable(
-      @request() req: Request,
-      @response() res: Response
-    ) {
-      try {
-        const response = await this._updateDataToDynamoDBTable();
-  
-        return res.apiSuccess({
-          message: "Data updated into DynamoDB successfully",
-          data: response,
-        });
-      } catch (err) {
-        console.error("Error - updateDataToDynamoDBTable: ", err);
-  
-        const ErrorResponse = ResponseWrapperCode.generalError;
-        ErrorResponse.message = `Failed to update data into DynamoDB Table: ${err.message}`;
-        return res.apiError(ErrorResponse);
-      }
+  @httpPost("/updateDataToDynamoDBTable")
+  async updateDataToDynamoDBTable(
+    @request() req: Request,
+    @response() res: Response
+  ) {
+    try {
+      const response = await this._updateDataToDynamoDBTable();
+
+      return res.apiSuccess({
+        message: "Data updated into DynamoDB successfully",
+        data: response,
+      });
+    } catch (err) {
+      console.error("Error - updateDataToDynamoDBTable: ", err);
+
+      const ErrorResponse = ResponseWrapperCode.generalError;
+      ErrorResponse.message = `Failed to update data into DynamoDB Table: ${err.message}`;
+      return res.apiError(ErrorResponse);
     }
+  }
 
   /**
    * @swagger
-   * /api/dynamoDB/getPostsData:
+   * /api/dynamoDB/retrieveData:
    *   get:
    *     tags:
    *       - DynamoDB
@@ -508,33 +690,37 @@ export class DynamoDBController extends BaseHttpController {
    *       500:
    *         description: Internal server error
    */
-  @httpGet("/getPostsData")
-  async getPostsData(
+  @httpGet("/retrieveData")
+  async retrieveData(
     @response() res: Response,
     @queryParam("postId") postId?: string,
     @queryParam("type") type?: string,
     @queryParam("subType") subType?: string,
-    @queryParam("category") category?: string,
+    @queryParam("category") category?: string[],
     @queryParam("requestedAmount") requestedAmount?: string,
+    @queryParam("requestedAmountOperator") requestedAmountOperator?: string,
     @queryParam("reward") reward?: string,
+    @queryParam("rewardOperator") rewardOperator?: string,
     @queryParam("submitter") submitter?: string,
-    @queryParam("date") date?: string,
-    @queryParam("dateDifference") dateDifference?: string,
-    @queryParam("vectorFileId") vectorFileId?: string,
+    @queryParam("startDate") startDate?: string,
+    @queryParam("endDate") endDate?: string,
+    @queryParam("vectorFileId") vectorFileId?: string
   ) {
     try {
-
-      const response = await this._getPostsData({postId: postId,
+      const response = await this._retrieveData({
+        postId: postId,
         type: type,
-                subType: subType,
-                category: category,
-                requestedAmount: requestedAmount,
-                reward: reward,
-                submitter: submitter,
-                date: date,
-                dateDifference: dateDifference,
-                vectorFileId: vectorFileId})
-      
+        subType: subType,
+        category: category,
+        requestedAmount: requestedAmount,
+        requestedAmountOperator: requestedAmountOperator,
+        reward: reward,
+        rewardOperator: rewardOperator,
+        submitter: submitter,
+        startDate: startDate,
+        endDate: endDate,
+        vectorFileId: vectorFileId,
+      });
 
       return res.apiSuccess(response);
     } catch (err) {

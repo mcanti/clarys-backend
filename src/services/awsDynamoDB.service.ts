@@ -114,6 +114,7 @@ export class AwsDynamoDBService {
       requestedAmount: string;
       reward: string;
       submitter: string;
+      docsLinks: string[];
       vectorFileId: string;
       post: Record<string, any>; // Allow mixed types in post object
     }
@@ -122,6 +123,8 @@ export class AwsDynamoDBService {
       const categoriesAsDynamoDBList = item.categories.map((category) => ({
         S: category,
       }));
+
+      const docsLinksAsDynamoDBList = item.docsLinks.map((link) => ({ S: link }));
 
       const convertToDynamoDBFormat = (data: any): any => {
         if (data === null || data === undefined) {
@@ -154,6 +157,7 @@ export class AwsDynamoDBService {
         type: { S: item.type },
         subType: { S: item.subType },
         categories: { L: categoriesAsDynamoDBList },
+        docsLinks: { L: docsLinksAsDynamoDBList },
         requestedAmount: { S: item.requestedAmount },
         reward: { S: item.reward },
         submitter: { S: item.submitter },
@@ -177,7 +181,8 @@ export class AwsDynamoDBService {
     }
   };
 
-  updateItemIntoTable = async (tableName: string,
+  updateItemIntoTable = async (
+    tableName: string,
     item: {
       postId: string;
       creationDate: string;
@@ -188,14 +193,12 @@ export class AwsDynamoDBService {
       reward: string;
       submitter: string;
       vectorFileId: string;
-      post: Record<string, any>; // Allow mixed types in post object
-    }) => {
+      docsLinks: string[];
+      post: Record<string, any>;
+    }
+  ) => {
     try {
-      const categoriesAsDynamoDBList = item.categories.map((category) => ({
-        S: category,
-      }));
-
-      const convertToDynamoDBFormat = (data: any): any => {
+      const convertToDynamoDBFormat = (data) => {
         if (data === null || data === undefined) {
           return { NULL: true };
         } else if (typeof data === "string") {
@@ -217,39 +220,53 @@ export class AwsDynamoDBService {
           throw new Error(`Unsupported data type: ${typeof data}`);
         }
       };
-
-      const postAsDynamoDBMap = convertToDynamoDBFormat(item.post);
-
-      const itemParams = {
-        postId: { S: item.postId },
-        creationDate: { S: item.creationDate },
-        type: { S: item.type },
-        subType: { S: item.subType },
-        categories: { L: categoriesAsDynamoDBList },
-        requestedAmount: { S: item.requestedAmount },
-        reward: { S: item.reward },
-        submitter: { S: item.submitter },
-        vectorFileId: { S: item.vectorFileId },
-        json: postAsDynamoDBMap,
+  
+      const updateExpressionParts = [];
+      const expressionAttributeValues = {};
+      const expressionAttributeNames = {};
+  
+      const addUpdateExpression = (key, value) => {
+        const attributePlaceholder = `#${key}`;
+        const valuePlaceholder = `:${key}`;
+        updateExpressionParts.push(`${attributePlaceholder} = ${valuePlaceholder}`);
+        expressionAttributeValues[valuePlaceholder] = convertToDynamoDBFormat(value);
+        expressionAttributeNames[attributePlaceholder] = key;
       };
-
+  
+      addUpdateExpression("creationDate", item.creationDate);
+      addUpdateExpression("type", item.type);
+      addUpdateExpression("subType", item.subType);
+      addUpdateExpression("categories", item.categories);
+      addUpdateExpression("docsLinks", item.docsLinks);
+      addUpdateExpression("requestedAmount", item.requestedAmount);
+      addUpdateExpression("reward", item.reward);
+      addUpdateExpression("submitter", item.submitter);
+      addUpdateExpression("vectorFileId", item.vectorFileId);
+      addUpdateExpression("json", item.post);
+  
       const params: UpdateItemCommandInput = {
         TableName: tableName,
-        Key: itemParams
+        Key: {
+          postId: { S: item.postId },
+        },
+        UpdateExpression: `SET ${updateExpressionParts.join(", ")}`,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ExpressionAttributeNames: expressionAttributeNames,
+        ReturnValues: "ALL_NEW",
       };
-
+  
       const command = new UpdateItemCommand(params);
-      const addItemToTableResponse = await this.dynamoDBClient.send(command);
-      console.log("Item added successfully: ", addItemToTableResponse);
-
-      return addItemToTableResponse;
+      const updateResponse = await this.dynamoDBClient.send(command);
+      console.log("Item updated successfully:", updateResponse);
+  
+      return updateResponse;
     } catch (err) {
-      console.error("Error adding item:", err);
+      console.error("Error updating item:", err);
       return null;
     }
-
   };
-
+  
+  
   dynamoDBToJSON = (dynamoItem: Record<string, any>): any => {
     const transformValue = (value: any): any => {
       if (value.S !== undefined) return value.S;
@@ -274,32 +291,99 @@ export class AwsDynamoDBService {
 
   getFilteredPosts = async (
     tableName: string,
-    filters: Record<string, any>
+    filters: {
+      postId?: string;
+      type?: string;
+      subType?: string;
+      category?: string[];
+      requestedAmount?: string;
+      requestedAmountOperator?: string; // Default to '='
+      reward?: string;
+      rewardOperator?: string; // Default to '='
+      submitter?: string;
+      startDate?: string; // yyyy-mm-dd or 'today'
+      endDate?: string; // yyyy-mm-dd or 'today'
+      vectorFileId?: string;
+    }
   ) => {
-    console.log("tableName", tableName);
-    console.log("filters", filters);
-
     try {
       let filterExpression = "";
       const expressionAttributeValues: Record<string, any> = {};
       const expressionAttributeNames: Record<string, string> = {};
 
-      if (Object.keys(filters).length > 0) {
-        Object.entries(filters).forEach(([key, value], index) => {
-          if (value !== undefined && value !== null) {
-            const placeholder = `:val${index}`;
-            const attributeNamePlaceholder = `#key${index}`;
+      const addFilter = (key: string, operator: string, value: any) => {
+        const placeholder = `:val${
+          Object.keys(expressionAttributeValues).length
+        }`;
+        const attributeNamePlaceholder = `#${key}`;
+        filterExpression += filterExpression ? " AND " : "";
+        filterExpression += `${attributeNamePlaceholder} ${operator} ${placeholder}`;
+        expressionAttributeValues[placeholder] = { S: value };
+        expressionAttributeNames[attributeNamePlaceholder] = key;
+      };
 
-            filterExpression += filterExpression ? ` AND ` : "";
-            filterExpression += `${attributeNamePlaceholder} = ${placeholder}`;
+      if (filters.postId) addFilter("postId", "=", filters.postId);
+      if (filters.type) addFilter("type", "=", filters.type);
+      if (filters.subType) addFilter("subType", "=", filters.subType);
+      if (filters.submitter) addFilter("submitter", "=", filters.submitter);
+      if (filters.vectorFileId)
+        addFilter("vectorFileId", "=", filters.vectorFileId);
 
-            expressionAttributeValues[placeholder] =
-              typeof value === "string"
-                ? { S: value }
-                : { N: value.toString() };
-            expressionAttributeNames[attributeNamePlaceholder] = key;
-          }
+      if (filters.category && filters.category.length > 0) {
+        filters.category.forEach((cat, index) => {
+          const placeholder = `:cat${index}`;
+          filterExpression += filterExpression ? " AND " : "";
+          filterExpression += `contains(#categories, ${placeholder})`;
+          expressionAttributeValues[placeholder] = { S: cat };
         });
+        expressionAttributeNames["#categories"] = "categories";
+      }
+
+      const requestedAmountOperator = filters.requestedAmountOperator || "=";
+      const rewardOperator = filters.rewardOperator || "=";
+
+      const validOperators = new Set(["=", "<", "<=", ">", ">="]);
+
+      if (filters.requestedAmount) {
+        if (validOperators.has(requestedAmountOperator)) {
+          const placeholder = `:requestedAmount`;
+          filterExpression += filterExpression ? " AND " : "";
+          filterExpression += `#requestedAmount ${requestedAmountOperator} ${placeholder}`;
+          expressionAttributeValues[placeholder] = {
+            N: filters.requestedAmount,
+          };
+          expressionAttributeNames["#requestedAmount"] = "requestedAmount";
+        }
+      }
+
+      if (filters.reward) {
+        if (validOperators.has(rewardOperator)) {
+          const placeholder = `:reward`;
+          filterExpression += filterExpression ? " AND " : "";
+          filterExpression += `#reward ${rewardOperator} ${placeholder}`;
+          expressionAttributeValues[placeholder] = { N: filters.reward };
+          expressionAttributeNames["#reward"] = "reward";
+        }
+      }
+
+      const today = new Date().toISOString().split("T")[0]; // Format: yyyy-mm-dd
+      if (filters.startDate) {
+        const startDate =
+          filters.startDate === "today" ? today : filters.startDate;
+        const placeholder = `:startDate`;
+        filterExpression += filterExpression ? " AND " : "";
+        filterExpression += `#creationDate >= ${placeholder}`;
+        expressionAttributeValues[placeholder] = { S: startDate };
+        expressionAttributeNames["#creationDate"] = "creationDate";
+      }
+
+      if (filters.endDate) {
+        const endDate = filters.endDate === "today" ? today : filters.endDate;
+        const placeholder = `:endDate`;
+        filterExpression += filterExpression ? " AND " : "";
+        filterExpression += `#creationDate <= ${placeholder}`;
+        expressionAttributeValues[placeholder] = { S: endDate };
+        expressionAttributeNames["#creationDate"] = "creationDate";
       }
 
       const params: any = {
@@ -312,12 +396,11 @@ export class AwsDynamoDBService {
         params.ExpressionAttributeNames = expressionAttributeNames;
       }
 
-      console.log("params", params);
+      console.log("DynamoDB Query Params:", JSON.stringify(params, null, 2));
 
       const command = new ScanCommand(params);
       const result = await this.dynamoDBClient.send(command);
 
-      // Transform the result into a plain JSON format
       const transformedItems = result.Items?.map(this.dynamoDBToJSON);
 
       return transformedItems;
@@ -326,42 +409,4 @@ export class AwsDynamoDBService {
       throw err;
     }
   };
-
-  // addDataToDynamoDBTable = async (tableName: string) => {
-  //   console.log("tableName", tableName);
-
-  //   try {
-  //     const command = new DescribeTableCommand({ TableName: tableName });
-  //     const response = await this.dynamoDBClient.send(command);
-  //     console.log("response", response);
-
-  //     console.log(`Table ${tableName} already exists`);
-  //   } catch (error) {
-  //     if (error.name === "ResourceNotFoundException") {
-  //       console.log(`Creating table ${tableName}`);
-  //       const command = new CreateTableCommand({
-  //         TableName: tableName,
-  //         KeySchema: [
-  //           { AttributeName: "postId", KeyType: "HASH" }, // Partition key
-  //           { AttributeName: "creationDate", KeyType: "RANGE" }, // Sort key
-  //         ],
-  //         AttributeDefinitions: [
-  //           { AttributeName: "postId", AttributeType: "S" }, // String
-  //           { AttributeName: "creationDate", AttributeType: "S" }, // String
-  //         ],
-  //         BillingMode: "PAY_PER_REQUEST", // No provisioned throughput
-  //       });
-
-  //       const response = await this.dynamoDBClient.send(command);
-  //       console.log(
-  //         "Table created successfully:",
-  //         response.TableDescription.TableName
-  //       );
-  //       return response;
-  //     } else {
-  //       console.error(`Failed to describe or create table: ${error.message}`);
-  //       return null;
-  //     }
-  //   }
-  // };
 }

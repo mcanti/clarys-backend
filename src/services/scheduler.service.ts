@@ -10,6 +10,7 @@ import { DotEventsController } from "../controllers/dotevents.controller";
 import { DotMeetUpsController } from "../controllers/dotMeetUps.controller";
 import { S3Controller } from "../controllers/s3.controller";
 import { OpenAIController } from "../controllers/openAI.controller";
+import { DynamoDBController } from "../controllers/dynamoDB.controller";
 
 import {
   proposalTypeList,
@@ -25,7 +26,7 @@ import {
   findFiledId,
   findGoogleDocsLinks,
 } from "../helpers/googleDocsLinksFinder.helper";
-import { delay } from "../helpers/utilsFunctions.helper";
+import { delay, mapWithConcurrency } from "../helpers/utilsFunctions.helper";
 import {
   findGoogleDriveDocsLinks,
   extractFolderId,
@@ -50,7 +51,8 @@ export class SchedulerService {
     @inject("DotMeetUpsController")
     private dotMeetUpsController: DotMeetUpsController,
     @inject("S3Controller") private s3Controller: S3Controller,
-    @inject("OpenAIController") private openAIController: OpenAIController
+    @inject("OpenAIController") private openAIController: OpenAIController,
+    @inject("DynamoDBController") private dynamoDBController: DynamoDBController
   ) {
     this.firstRun = process.env.FIRST_RUN === "true" ? true : false;
   }
@@ -154,12 +156,14 @@ export class SchedulerService {
   //Folder Objects and Files Schedulers
 
   async updateOnChainPostFolder() {
-    cron.schedule("0 */10 * * *", async () => {
+    cron.schedule("0 */5 * * *", async () => {
       console.log("Running scheduled task...");
 
       try {
         const allPromises = await Promise.allSettled(
           proposalTypeList.map(async (proposalType) => {
+            console.log("proposalType: ", proposalType);
+
             const key = `OnChainPosts/${proposalType}/${proposalType}-List.json`;
 
             const storedList = await this.s3Controller._s3GetFile(key);
@@ -177,10 +181,12 @@ export class SchedulerService {
                 ) {
                   return await Promise.allSettled(
                     storedList.modifiedPostsIds.map(async (id) => {
-                      await this.polkassemblyController._findOnChainPost(
-                        proposalType,
-                        id
-                      );
+                      const updatedOnChainPost =
+                        await this.polkassemblyController._findOnChainPost(
+                          proposalType,
+                          id
+                        );
+                      console.log("updatedOnChainPost: ", updatedOnChainPost);
                     })
                   );
                 } else if (
@@ -233,14 +239,17 @@ export class SchedulerService {
                 `OffChainPost/${proposalType}/`
               );
 
-            console.log(storedList?.count);
-
             if (storedList != null && typeof storedList != "string") {
               if (storedList?.posts) {
                 if (
                   storedList?.modifiedPostsIds &&
                   storedList.modifiedPostsIds.length > 0
                 ) {
+                  console.log(
+                    "Posts updated to find and upload:",
+                    storedList.modifiedPostsIds.length
+                  );
+
                   return await Promise.allSettled(
                     storedList.modifiedPostsIds.map(async (id) => {
                       await this.polkassemblyController._findOffChainPost(
@@ -254,12 +263,18 @@ export class SchedulerService {
                   (existingPostsFolderList &&
                     existingPostsFolderList.length === 0)
                 ) {
+                  console.log(
+                    "Posts to find and upload:",
+                    storedList.posts.length
+                  );
+
                   return await Promise.allSettled(
                     storedList.posts.map(async (post, index) => {
                       await this.polkassemblyController._findOffChainPost(
                         proposalType,
                         post.post_id
                       );
+
                       if (index === storedList.posts.length - 1) {
                         console.log("last item");
                       }
@@ -289,7 +304,7 @@ export class SchedulerService {
   }
 
   async updateOffChainEventsAndSubEventsPostFolder() {
-    cron.schedule("0 */2 * * *", async () => {
+    cron.schedule("0 */1 * * *", async () => {
       console.log(
         "Running scheduled updateOffChainEventsAndSubEventsPostFolder task ..."
       );
@@ -560,7 +575,7 @@ export class SchedulerService {
   }
 
   async updateOffChainMeetUpEventsPostFolder() {
-    cron.schedule("0 */2 * * *", async () => {
+    cron.schedule("0 */1 * * *", async () => {
       console.log(
         "Running scheduled updateOffChainMeetUpEventsPostFolder task ..."
       );
@@ -833,124 +848,180 @@ export class SchedulerService {
   //OPEN AI
 
   async updateOnChainDataToVectorStore() {
-    cron.schedule("0 */12 * * *", async () => {
-    console.log("Running scheduled task: updateOnChainDataToVectorStore ...");
-    try {
-      let keysAndNames = [];
-      for (const proposalType of onChainProposalTypeList) {
-        const listFileKey = `OnChainPosts/${proposalType}/${proposalType}-List.json`;
-        keysAndNames.push({
-          key: listFileKey,
-          name: `${proposalType}-List.json`,
-        });
+    cron.schedule("0 */4 * * *", async () => {
+      console.log("Running scheduled task: updateOnChainDataToVectorStore ...");
+      try {
+        let keysAndNames = [];
+        for (const proposalType of onChainProposalTypeList) {
+          console.log("proposalType: ", proposalType);
 
-        const proposalsListResponse = await this.s3Controller._s3GetFile(
-          listFileKey
-        );
+          const listFileKey = `OnChainPosts/${proposalType}/${proposalType}-List.json`;
+          keysAndNames.push({
+            key: listFileKey,
+            name: `${proposalType}-List.json`,
+          });
 
-        const folderKey = `OnChainPost/${proposalType}/`;
-
-        const filteredFolderList = [];
-
-        if (this.firstRun) {
-          //geting the folders for all proposals
-          // console.log("geting the folders for all proposals");
-          const foldersList = await this.s3Controller._s3ListFilesAndFolders(
-            "folders",
-            folderKey
+          const proposalsListResponse = await this.s3Controller._s3GetFile(
+            listFileKey
           );
 
-          if (foldersList) {
-            filteredFolderList.push(...foldersList);
-          }
-        } else if (
-          proposalsListResponse &&
-          proposalsListResponse.modifiedPostsIds &&
-          proposalsListResponse.modifiedPostsIds.length > 0
-        ) {
-          //geting only the folders for modified ids
-          // console.log("geting only the folders for modified proposals ids");
-          const allVectorStoreFiles =
-            await this.openAIController._listAllVectorStoreFiles();
-          const vectorStoreFilesToBeDeleted = [];
+          const folderKey = `OnChainPost/${proposalType}/`;
 
-          for (const id of proposalsListResponse.modifiedPostsIds) {
-            for (const vectorFile of allVectorStoreFiles) {
-              const openAIFile = await this.openAIController._getFile(
-                vectorFile.id
-              );
-              if (openAIFile.filename.includes(`${proposalType}-Id${id}`)) {
-                vectorStoreFilesToBeDeleted.push(openAIFile);
+          const filteredFolderList = [];
+
+          if (this.firstRun) {
+            console.log("geting the folders for all proposals");
+            const foldersList = await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              folderKey
+            );
+
+            if (foldersList) {
+              filteredFolderList.push(...foldersList);
+            }
+          } else if (
+            proposalsListResponse &&
+            proposalsListResponse.modifiedPostsIds &&
+            proposalsListResponse.modifiedPostsIds.length > 0
+          ) {
+            console.log("geting only the folders for modified proposals ids");
+
+            //time cost
+            // const allVectorStoreFiles =
+            //   await this.openAIController._listAllVectorStoreFiles();
+            const vectorStoreFilesToBeDeleted = [];
+
+            const foldersList = await this.s3Controller._s3ListFilesAndFolders(
+              "folders",
+              folderKey
+            );
+            for (const folder of foldersList) {
+              for (const modifiedPostsId of proposalsListResponse.modifiedPostsIds) {
+                if (folder.includes(`/${modifiedPostsId}/`)) {
+                  filteredFolderList.push(folder);
+                }
               }
             }
-            filteredFolderList.push(`${folderKey}${id}/`);
+
+            // for (const id of proposalsListResponse.modifiedPostsIds) {
+            //   for (const vectorFile of allVectorStoreFiles) {
+            //     const openAIFile = await this.openAIController._getFile(
+            //       vectorFile.id
+            //     );
+            //     if (openAIFile.filename.includes(`${proposalType}-Id${id}`)) {
+            //       vectorStoreFilesToBeDeleted.push(openAIFile);
+            //     }
+            //   }
+            //   filteredFolderList.push(`${folderKey}${id}/`);
+            // }
+
+            // for (const file of vectorStoreFilesToBeDeleted) {
+            //   await this.openAIController._deleteVectorStoreFile(file.id);
+            // }
           }
 
-          for (const file of vectorStoreFilesToBeDeleted) {
-            await this.openAIController._deleteVectorStoreFile(file.id);
-          }
-        }
+          console.log("filteredFolderList: ", filteredFolderList);
+          console.log("Total folders to process: ", filteredFolderList.length);
 
-        for (const folder of filteredFolderList) {
-          // console.log("searching in folder:", folder);
-
-          const filesList = await this.s3Controller._s3ListFilesAndFolders(
-            "files",
-            folder
-          );
-
-          // console.log(filesList);
-
-          if (filesList && filesList.length > 0) {
-            filesList.forEach((file) => {
-              keysAndNames.push({
-                key: file,
-                name: `${proposalType}-Id${
-                  folder.split("/").slice(-2)[0]
-                }-${file.split("/").slice(-1)}`,
-              });
-            });
-          }
-
-          const docsFolderList = await this.s3Controller._s3ListFilesAndFolders(
-            "folders",
-            folder
-          );
-
-          if (docsFolderList.length > 0) {
-            for (const docsFolder of docsFolderList) {
-              const docFilesList =
-                await this.s3Controller._s3ListFilesAndFolders(
+          await mapWithConcurrency(
+            filteredFolderList,
+            async (folder) => {
+              const filesListPromise = this.s3Controller._s3ListFilesAndFolders(
+                "files",
+                folder
+              );
+              const subfolderFilesListPromise =
+                this.s3Controller._s3ListFilesAndFolders(
                   "files",
-                  docsFolder
+                  `${folder}docs/`
                 );
 
-              if (docFilesList && docFilesList.length > 0) {
-                docFilesList.forEach((docFiles) => {
+              const [filesList, subfolderFilesList] = await Promise.all([
+                filesListPromise,
+                subfolderFilesListPromise,
+              ]);
+
+              const folderId = folder.split("/").slice(-2)[0];
+
+              if (filesList?.length) {
+                filesList.forEach((file) => {
                   keysAndNames.push({
-                    key: docFiles,
-                    name: `${proposalType}-Id${
-                      folder.split("/").slice(-2)[0]
-                    }-${docFiles.split("/").slice(-1)}`,
+                    key: file,
+                    name: `${proposalType}-Id${folderId}-${file
+                      .split("/")
+                      .slice(-1)}`,
                   });
                 });
               }
-            }
-          }
+
+              if (subfolderFilesList?.length) {
+                subfolderFilesList.forEach((docFile) => {
+                  keysAndNames.push({
+                    key: docFile,
+                    name: `${proposalType}-Id${folderId}-${docFile
+                      .split("/")
+                      .slice(-1)}`,
+                  });
+                });
+              }
+            },
+            50
+          );
+
+          // for (const folder of filteredFolderList) {
+          //   // console.log("searching files in folder:", folder);
+          //   const filesList = await this.s3Controller._s3ListFilesAndFolders(
+          //     "files",
+          //     folder
+          //   );
+          //   // console.log("Files in folder: ", filesList);
+
+          //   // console.log("searching files in subfolder:", `${folder}docs/`);
+          //   const subfolderFilesList = await this.s3Controller._s3ListFilesAndFolders(
+          //     "files",
+          //     `${folder}docs/`
+          //   );
+          //   // console.log("subfolderFilesList", subfolderFilesList);
+
+          //   if (filesList && filesList.length > 0) {
+          //     filesList.forEach((file) => {
+          //       keysAndNames.push({
+          //         key: file,
+          //         name: `${proposalType}-Id${
+          //           folder.split("/").slice(-2)[0]
+          //         }-${file.split("/").slice(-1)}`,
+          //       });
+          //     });
+          //   }
+
+          //   if (subfolderFilesList && subfolderFilesList.length > 0) {
+          //     subfolderFilesList.forEach((docFiles) => {
+          //       keysAndNames.push({
+          //         key: docFiles,
+          //         name: `${proposalType}-Id${
+          //           folder.split("/").slice(-2)[0]
+          //         }-${docFiles.split("/").slice(-1)}`,
+          //       });
+          //     });
+          //   }
+          // }
         }
+
+        console.log("Total keys and names collected: ", keysAndNames.length);
+
+        await this.openAIController._uploadFilesToOpenAIVectorStore(
+          keysAndNames
+        );
+
+        console.log(
+          "Scheduled task: updateOnChainDataToVectorStore completed successfully."
+        );
+      } catch (err) {
+        console.log(
+          "Error executing scheduled updateOnChainDataToVectorStore task:",
+          err
+        );
       }
-
-      await this.openAIController._uploadFilesToOpenAIVectorStore(keysAndNames);
-
-      console.log(
-        "Scheduled task: updateOnChainDataToVectorStore completed successfully."
-      );
-    } catch (err) {
-      console.log(
-        "Error executing scheduled updateOnChainDataToVectorStore task:",
-        err
-      );
-    }
     });
   }
 
@@ -960,8 +1031,10 @@ export class SchedulerService {
         "Running scheduled task: updateOffChainDataToVectorStore ..."
       );
       try {
+        let keysAndNames = [];
         for (const proposalType of offChainProposalTypeList) {
-          let keysAndNames = [];
+          console.log("proposalType: ", proposalType);
+
           let listFileKey;
           if (proposalType === "events") {
             const listFileKey = [
@@ -992,8 +1065,6 @@ export class SchedulerService {
             const filteredSubEventsFolderList = [];
 
             if (this.firstRun) {
-              //geting the folders for all proposals
-              // console.log("geting the folders for all proposals");
               const foldersList =
                 await this.s3Controller._s3ListFilesAndFolders(
                   "folders",
@@ -1008,78 +1079,138 @@ export class SchedulerService {
               proposalsEventsListResponse?.modifiedPostsIds &&
               proposalsEventsListResponse?.modifiedPostsIds.length > 0
             ) {
-              //geting only the folders for modified ids
-              // console.log("geting only the folders for modified proposals ids");
-
-              const allVectorStoreFiles =
-                await this.openAIController._listAllVectorStoreFiles();
+              //time cost
+              // const allVectorStoreFiles =
+              //   await this.openAIController._listAllVectorStoreFiles();
               const vectorStoreFilesToBeDeleted = [];
 
-              for (const id of proposalsEventsListResponse.modifiedPostsIds) {
-                for (const vectorFile of allVectorStoreFiles) {
-                  const openAIFile = await this.openAIController._getFile(
-                    vectorFile.id
-                  );
-                  if (openAIFile.filename.includes(`${proposalType}-Id${id}`)) {
-                    vectorStoreFilesToBeDeleted.push(openAIFile);
-                  }
-                }
-                filteredEventsFolderList.push(`${folderEventsKey}${id}/`);
-              }
-
-              for (const file of vectorStoreFilesToBeDeleted) {
-                await this.openAIController._deleteVectorStoreFile(file.id);
-              }
-            }
-
-            for (const folder of filteredEventsFolderList) {
-              // console.log("searching in folder:", folder);
-
-              const filesList = await this.s3Controller._s3ListFilesAndFolders(
-                "files",
-                folder
-              );
-
-              // console.log(filesList);
-
-              if (filesList && filesList.length > 0) {
-                filesList.forEach((file) => {
-                  keysAndNames.push({
-                    key: file,
-                    name: `${proposalType}-Id${
-                      folder.split("/").slice(-2)[0]
-                    }-${file.split("/").slice(-1)}`,
-                  });
-                });
-              }
-
-              const docsFolderList =
+              const foldersList =
                 await this.s3Controller._s3ListFilesAndFolders(
                   "folders",
-                  folder
+                  folderEventsKey
                 );
-
-              if (docsFolderList.length > 0) {
-                for (const docsFolder of docsFolderList) {
-                  const docFilesList =
-                    await this.s3Controller._s3ListFilesAndFolders(
-                      "files",
-                      docsFolder
-                    );
-
-                  if (docFilesList && docFilesList.length > 0) {
-                    docFilesList.forEach((docFiles) => {
-                      keysAndNames.push({
-                        key: docFiles,
-                        name: `${proposalType}-Id${
-                          folder.split("/").slice(-2)[0]
-                        }-${docFiles.split("/").slice(-1)}`,
-                      });
-                    });
+              for (const folder of foldersList) {
+                for (const modifiedPostsId of proposalsEventsListResponse.modifiedPostsIds) {
+                  if (folder.includes(`/${modifiedPostsId}/`)) {
+                    filteredEventsFolderList.push(folder);
                   }
                 }
               }
+
+              // for (const id of proposalsEventsListResponse.modifiedPostsIds) {
+              //   for (const vectorFile of allVectorStoreFiles) {
+              //     const openAIFile = await this.openAIController._getFile(
+              //       vectorFile.id
+              //     );
+              //     if (openAIFile.filename.includes(`${proposalType}-Id${id}`)) {
+              //       vectorStoreFilesToBeDeleted.push(openAIFile);
+              //     }
+              //   }
+              //   filteredEventsFolderList.push(`${folderEventsKey}${id}/`);
+              // }
+
+              // for (const file of vectorStoreFilesToBeDeleted) {
+              //   await this.openAIController._deleteVectorStoreFile(file.id);
+              // }
             }
+
+            console.log("filteredEventsFolderList: ", filteredEventsFolderList);
+            console.log(
+              "Total folders to process: ",
+              filteredEventsFolderList.length
+            );
+
+            await mapWithConcurrency(
+              filteredEventsFolderList,
+              async (folder) => {
+                const filesListPromise =
+                  this.s3Controller._s3ListFilesAndFolders("files", folder);
+                const subfolderFilesListPromise =
+                  this.s3Controller._s3ListFilesAndFolders(
+                    "files",
+                    `${folder}docs/`
+                  );
+
+                const [filesList, subfolderFilesList] = await Promise.all([
+                  filesListPromise,
+                  subfolderFilesListPromise,
+                ]);
+
+                const folderId = folder.split("/").slice(-2)[0];
+
+                if (filesList?.length) {
+                  filesList.forEach((file) => {
+                    keysAndNames.push({
+                      key: file,
+                      name: `${proposalType}-Id${folderId}-${file
+                        .split("/")
+                        .slice(-1)}`,
+                    });
+                  });
+                }
+
+                if (subfolderFilesList?.length) {
+                  subfolderFilesList.forEach((docFile) => {
+                    keysAndNames.push({
+                      key: docFile,
+                      name: `${proposalType}-Id${folderId}-${docFile
+                        .split("/")
+                        .slice(-1)}`,
+                    });
+                  });
+                }
+              },
+              50
+            );
+
+            // for (const folder of filteredEventsFolderList) {
+            //   // console.log("searching in folder:", folder);
+
+            //   const filesList = await this.s3Controller._s3ListFilesAndFolders(
+            //     "files",
+            //     folder
+            //   );
+
+            //   // console.log(filesList);
+
+            //   if (filesList && filesList.length > 0) {
+            //     filesList.forEach((file) => {
+            //       keysAndNames.push({
+            //         key: file,
+            //         name: `${proposalType}-Id${
+            //           folder.split("/").slice(-2)[0]
+            //         }-${file.split("/").slice(-1)}`,
+            //       });
+            //     });
+            //   }
+
+            //   const docsFolderList =
+            //     await this.s3Controller._s3ListFilesAndFolders(
+            //       "folders",
+            //       folder
+            //     );
+
+            //   if (docsFolderList.length > 0) {
+            //     for (const docsFolder of docsFolderList) {
+            //       const docFilesList =
+            //         await this.s3Controller._s3ListFilesAndFolders(
+            //           "files",
+            //           docsFolder
+            //         );
+
+            //       if (docFilesList && docFilesList.length > 0) {
+            //         docFilesList.forEach((docFiles) => {
+            //           keysAndNames.push({
+            //             key: docFiles,
+            //             name: `${proposalType}-Id${
+            //               folder.split("/").slice(-2)[0]
+            //             }-${docFiles.split("/").slice(-1)}`,
+            //           });
+            //         });
+            //       }
+            //     }
+            //   }
+            // }
 
             if (this.firstRun) {
               //geting the folders for all proposals
@@ -1093,7 +1224,7 @@ export class SchedulerService {
               if (foldersList) {
                 filteredSubEventsFolderList.push(...foldersList);
               }
-            }else if (
+            } else if (
               proposalsSubEventsListResponse &&
               proposalsSubEventsListResponse?.modifiedPostsIds &&
               proposalsSubEventsListResponse?.modifiedPostsIds.length > 0
@@ -1101,80 +1232,145 @@ export class SchedulerService {
               //geting only the folders for modified ids
               // console.log("geting only the folders for modified proposals ids");
 
-              for (const id of proposalsSubEventsListResponse.modifiedPostsIds) {
-                filteredSubEventsFolderList.push(`${folderSubEventsKey}${id}/`);
-              }
+              // for (const id of proposalsSubEventsListResponse.modifiedPostsIds) {
+              //   filteredSubEventsFolderList.push(`${folderSubEventsKey}${id}/`);
+              // }
 
-              const allVectorStoreFiles =
-                await this.openAIController._listAllVectorStoreFiles();
+              //timecost
+              // const allVectorStoreFiles =
+              //   await this.openAIController._listAllVectorStoreFiles();
               const vectorStoreFilesToBeDeleted = [];
 
-              for (const id of proposalsSubEventsListResponse.modifiedPostsIds) {
-                for (const vectorFile of allVectorStoreFiles) {
-                  const openAIFile = await this.openAIController._getFile(
-                    vectorFile.id
-                  );
-                  if (openAIFile.filename.includes(`subEvent-Id${id}`)) {
-                    vectorStoreFilesToBeDeleted.push(openAIFile);
-                  }
-                }
-                filteredSubEventsFolderList.push(`${folderSubEventsKey}${id}/`);
-              }
-
-              for (const file of vectorStoreFilesToBeDeleted) {
-                await this.openAIController._deleteVectorStoreFile(file.id);
-              }
-            } 
-            
-
-            for (const folder of filteredSubEventsFolderList) {
-              // console.log("searching in folder:", folder);
-
-              const filesList = await this.s3Controller._s3ListFilesAndFolders(
-                "files",
-                folder
-              );
-
-              // console.log(filesList);
-
-              if (filesList && filesList.length > 0) {
-                filesList.forEach((file) => {
-                  keysAndNames.push({
-                    key: file,
-                    name: `subEvent-Id${folder.split("/").slice(-2)[0]}-${file
-                      .split("/")
-                      .slice(-1)}`,
-                  });
-                });
-              }
-
-              const docsFolderList =
+              const foldersList =
                 await this.s3Controller._s3ListFilesAndFolders(
                   "folders",
-                  folder
+                  folderSubEventsKey
                 );
-
-              if (docsFolderList.length > 0) {
-                for (const docsFolder of docsFolderList) {
-                  const docFilesList =
-                    await this.s3Controller._s3ListFilesAndFolders(
-                      "files",
-                      docsFolder
-                    );
-
-                  if (docFilesList && docFilesList.length > 0) {
-                    docFilesList.forEach((docFiles) => {
-                      keysAndNames.push({
-                        key: docFiles,
-                        name: `subEvent-Id${
-                          folder.split("/").slice(-2)[0]
-                        }-${docFiles.split("/").slice(-1)}`,
-                      });
-                    });
+              for (const folder of foldersList) {
+                for (const modifiedPostsId of proposalsSubEventsListResponse.modifiedPostsIds) {
+                  if (folder.includes(`/${modifiedPostsId}/`)) {
+                    filteredSubEventsFolderList.push(folder);
                   }
                 }
               }
+
+              // for (const id of proposalsSubEventsListResponse.modifiedPostsIds) {
+              //   for (const vectorFile of allVectorStoreFiles) {
+              //     const openAIFile = await this.openAIController._getFile(
+              //       vectorFile.id
+              //     );
+              //     if (openAIFile.filename.includes(`subEvent-Id${id}`)) {
+              //       vectorStoreFilesToBeDeleted.push(openAIFile);
+              //     }
+              //   }
+              //   filteredSubEventsFolderList.push(`${folderSubEventsKey}${id}/`);
+              // }
+
+              // for (const file of vectorStoreFilesToBeDeleted) {
+              //   await this.openAIController._deleteVectorStoreFile(file.id);
+              // }
             }
+
+            console.log(
+              "filteredSubEventsFolderList: ",
+              filteredSubEventsFolderList
+            );
+            console.log(
+              "Total folders to process: ",
+              filteredSubEventsFolderList.length
+            );
+
+            await mapWithConcurrency(
+              filteredSubEventsFolderList,
+              async (folder) => {
+                const filesListPromise =
+                  this.s3Controller._s3ListFilesAndFolders("files", folder);
+                const subfolderFilesListPromise =
+                  this.s3Controller._s3ListFilesAndFolders(
+                    "files",
+                    `${folder}docs/`
+                  );
+
+                const [filesList, subfolderFilesList] = await Promise.all([
+                  filesListPromise,
+                  subfolderFilesListPromise,
+                ]);
+
+                const folderId = folder.split("/").slice(-2)[0];
+
+                if (filesList?.length) {
+                  filesList.forEach((file) => {
+                    keysAndNames.push({
+                      key: file,
+                      name: `${proposalType}-Id${folderId}-${file
+                        .split("/")
+                        .slice(-1)}`,
+                    });
+                  });
+                }
+
+                if (subfolderFilesList?.length) {
+                  subfolderFilesList.forEach((docFile) => {
+                    keysAndNames.push({
+                      key: docFile,
+                      name: `${proposalType}-Id${folderId}-${docFile
+                        .split("/")
+                        .slice(-1)}`,
+                    });
+                  });
+                }
+              },
+              50
+            );
+
+            // for (const folder of filteredSubEventsFolderList) {
+            //   // console.log("searching in folder:", folder);
+
+            //   const filesList = await this.s3Controller._s3ListFilesAndFolders(
+            //     "files",
+            //     folder
+            //   );
+
+            //   // console.log(filesList);
+
+            //   if (filesList && filesList.length > 0) {
+            //     filesList.forEach((file) => {
+            //       keysAndNames.push({
+            //         key: file,
+            //         name: `subEvent-Id${folder.split("/").slice(-2)[0]}-${file
+            //           .split("/")
+            //           .slice(-1)}`,
+            //       });
+            //     });
+            //   }
+
+            //   const docsFolderList =
+            //     await this.s3Controller._s3ListFilesAndFolders(
+            //       "folders",
+            //       folder
+            //     );
+
+            //   if (docsFolderList.length > 0) {
+            //     for (const docsFolder of docsFolderList) {
+            //       const docFilesList =
+            //         await this.s3Controller._s3ListFilesAndFolders(
+            //           "files",
+            //           docsFolder
+            //         );
+
+            //       if (docFilesList && docFilesList.length > 0) {
+            //         docFilesList.forEach((docFiles) => {
+            //           keysAndNames.push({
+            //             key: docFiles,
+            //             name: `subEvent-Id${
+            //               folder.split("/").slice(-2)[0]
+            //             }-${docFiles.split("/").slice(-1)}`,
+            //           });
+            //         });
+            //       }
+            //     }
+            //   }
+            // }
           } else {
             listFileKey = `OffChainPosts/${proposalType}/${proposalType}-List.json`;
             keysAndNames.push({
@@ -1208,83 +1404,150 @@ export class SchedulerService {
               proposalsListResponse.modifiedPostsIds.length > 0
             ) {
               //geting only the folders for modified ids
-              // console.log("geting only the folders for modified proposals ids");
+              console.log("geting only the folders for modified proposals ids");
 
-              const allVectorStoreFiles =
-                await this.openAIController._listAllVectorStoreFiles();
+              //time cost
+              // const allVectorStoreFiles =
+              //   await this.openAIController._listAllVectorStoreFiles();
+
               const vectorStoreFilesToBeDeleted = [];
 
-              for (const id of proposalsListResponse.modifiedPostsIds) {
-                for (const vectorFile of allVectorStoreFiles) {
-                  const openAIFile = await this.openAIController._getFile(
-                    vectorFile.id
-                  );
-                  if (openAIFile.filename.includes(`${proposalType}-Id${id}`)) {
-                    vectorStoreFilesToBeDeleted.push(openAIFile);
-                  }
-                }
-                filteredFolderList.push(`${folderKey}${id}/`);
-              }
-
-              for (const file of vectorStoreFilesToBeDeleted) {
-                await this.openAIController._deleteVectorStoreFile(file.id);
-              }
-            }
-
-            for (const folder of filteredFolderList) {
-              // console.log("searching in folder:", folder);
-
-              const filesList = await this.s3Controller._s3ListFilesAndFolders(
-                "files",
-                folder
-              );
-
-              // console.log(filesList);
-
-              if (filesList && filesList.length > 0) {
-                filesList.forEach((file) => {
-                  keysAndNames.push({
-                    key: file,
-                    name: `${proposalType}-Id${
-                      folder.split("/").slice(-2)[0]
-                    }-${file.split("/").slice(-1)}`,
-                  });
-                });
-              }
-
-              const docsFolderList =
+              // searching for the modified posts folders
+              const foldersList =
                 await this.s3Controller._s3ListFilesAndFolders(
                   "folders",
-                  folder
+                  folderKey
                 );
-
-              if (docsFolderList.length > 0) {
-                for (const docsFolder of docsFolderList) {
-                  const docFilesList =
-                    await this.s3Controller._s3ListFilesAndFolders(
-                      "files",
-                      docsFolder
-                    );
-
-                  if (docFilesList && docFilesList.length > 0) {
-                    docFilesList.forEach((docFiles) => {
-                      keysAndNames.push({
-                        key: docFiles,
-                        name: `${proposalType}-Id${
-                          folder.split("/").slice(-2)[0]
-                        }-${docFiles.split("/").slice(-1)}`,
-                      });
-                    });
+              for (const folder of foldersList) {
+                for (const modifiedPostsId of proposalsListResponse.modifiedPostsIds) {
+                  if (folder.includes(`/${modifiedPostsId}/`)) {
+                    filteredFolderList.push(folder);
                   }
                 }
               }
-            }
-          }
 
-          await this.openAIController._uploadFilesToOpenAIVectorStore(
-            keysAndNames
-          );
+              // identify the modified post file in vectore store
+              // for (const id of proposalsListResponse.modifiedPostsIds) {
+              //   for (const vectorFile of allVectorStoreFiles) {
+              //     const openAIFile = await this.openAIController._getFile(
+              //       vectorFile.id
+              //     );
+              //     if (openAIFile.filename.includes(`${proposalType}-Id${id}`)) {
+              //       vectorStoreFilesToBeDeleted.push(openAIFile);
+              //     }
+              //   }
+              //   filteredFolderList.push(`${folderKey}${id}/`);
+              // }
+
+              // older post file to be deleted from the vector store
+              // for (const file of vectorStoreFilesToBeDeleted) {
+              //   await this.openAIController._deleteVectorStoreFile(file.id);
+              // }
+            }
+
+            console.log("filteredFolderList: ", filteredFolderList);
+            console.log(
+              "Total folders to process: ",
+              filteredFolderList.length
+            );
+
+            await mapWithConcurrency(
+              filteredFolderList,
+              async (folder) => {
+                const filesListPromise =
+                  this.s3Controller._s3ListFilesAndFolders("files", folder);
+                const subfolderFilesListPromise =
+                  this.s3Controller._s3ListFilesAndFolders(
+                    "files",
+                    `${folder}docs/`
+                  );
+
+                const [filesList, subfolderFilesList] = await Promise.all([
+                  filesListPromise,
+                  subfolderFilesListPromise,
+                ]);
+
+                const folderId = folder.split("/").slice(-2)[0];
+
+                if (filesList?.length) {
+                  filesList.forEach((file) => {
+                    keysAndNames.push({
+                      key: file,
+                      name: `${proposalType}-Id${folderId}-${file
+                        .split("/")
+                        .slice(-1)}`,
+                    });
+                  });
+                }
+
+                if (subfolderFilesList?.length) {
+                  subfolderFilesList.forEach((docFile) => {
+                    keysAndNames.push({
+                      key: docFile,
+                      name: `${proposalType}-Id${folderId}-${docFile
+                        .split("/")
+                        .slice(-1)}`,
+                    });
+                  });
+                }
+              },
+              50
+            );
+
+            // for (const folder of filteredFolderList) {
+            //   console.log("searching in folder:", folder);
+
+            //   const filesList = await this.s3Controller._s3ListFilesAndFolders(
+            //     "files",
+            //     folder
+            //   );
+
+            //   if (filesList && filesList.length > 0) {
+            //     filesList.forEach((file) => {
+            //       keysAndNames.push({
+            //         key: file,
+            //         name: `${proposalType}-Id${
+            //           folder.split("/").slice(-2)[0]
+            //         }-${file.split("/").slice(-1)}`,
+            //       });
+            //     });
+            //   }
+
+            //   const docsFolderList =
+            //     await this.s3Controller._s3ListFilesAndFolders(
+            //       "folders",
+            //       folder
+            //     );
+
+            //   if (docsFolderList.length > 0) {
+            //     for (const docsFolder of docsFolderList) {
+            //       const docFilesList =
+            //         await this.s3Controller._s3ListFilesAndFolders(
+            //           "files",
+            //           docsFolder
+            //         );
+
+            //       if (docFilesList && docFilesList.length > 0) {
+            //         docFilesList.forEach((docFiles) => {
+            //           keysAndNames.push({
+            //             key: docFiles,
+            //             name: `${proposalType}-Id${
+            //               folder.split("/").slice(-2)[0]
+            //             }-${docFiles.split("/").slice(-1)}`,
+            //           });
+            //         });
+            //       }
+            //     }
+            //   }
+            // }
+          }
         }
+
+        console.log("Total keys and names collected: ", keysAndNames.length);
+
+        await this.openAIController._uploadFilesToOpenAIVectorStore(
+          keysAndNames
+        );
 
         console.log(
           "Scheduled task: updateOffChainDataToVectorStore completed successfully."
@@ -1294,6 +1557,19 @@ export class SchedulerService {
           "Error executing scheduled updateOffChainDataToVectorStore task:",
           err
         );
+      }
+    });
+  }
+
+  // DynamoDb
+
+  async updateDynamoDb() {
+    cron.schedule("0 */7 * * *", async () => {
+      console.log("Running scheduled task: updateDynamoDb ...");
+      try {
+        await this.dynamoDBController._updateDataToDynamoDBTable();
+      } catch (err) {
+        console.log("Error executing scheduled updateDynamoDb task:", err);
       }
     });
   }

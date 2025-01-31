@@ -164,7 +164,7 @@ export class DotMeetUpsController extends BaseHttpController {
         typeof storedMeetUpEventsList === "string" ||
         (storedMeetUpEventsList &&
           storedMeetUpEventsList?.count &&
-          storedMeetUpEventsList.count !== result.meetUpEvents.length)
+          result.meetUpEvents.length > storedMeetUpEventsList.count)
       ) {
         bufferEvents = Buffer.from(
           JSON.stringify({
@@ -180,7 +180,7 @@ export class DotMeetUpsController extends BaseHttpController {
             `${folder}/${meetUpEventsFileName}`,
             "application/json"
           );
-      } else {
+      } else if (result.meetUpEvents.length > 0) {
         if (storedMeetUpEventsList?.posts) {
           storedMeetUpEventsList.posts.forEach((post) => {
             result.meetUpEvents.forEach((newPost) => {

@@ -310,25 +310,22 @@ export class AwsDynamoDBService {
       let filterExpression = "";
       const expressionAttributeValues: Record<string, any> = {};
       const expressionAttributeNames: Record<string, string> = {};
-
+  
       const addFilter = (key: string, operator: string, value: any) => {
-        const placeholder = `:val${
-          Object.keys(expressionAttributeValues).length
-        }`;
+        const placeholder = `:val${Object.keys(expressionAttributeValues).length}`;
         const attributeNamePlaceholder = `#${key}`;
         filterExpression += filterExpression ? " AND " : "";
         filterExpression += `${attributeNamePlaceholder} ${operator} ${placeholder}`;
         expressionAttributeValues[placeholder] = { S: value };
         expressionAttributeNames[attributeNamePlaceholder] = key;
       };
-
+  
       if (filters.postId) addFilter("postId", "=", filters.postId);
       if (filters.type) addFilter("type", "=", filters.type);
       if (filters.subType) addFilter("subType", "=", filters.subType);
       if (filters.submitter) addFilter("submitter", "=", filters.submitter);
-      if (filters.vectorFileId)
-        addFilter("vectorFileId", "=", filters.vectorFileId);
-
+      if (filters.vectorFileId) addFilter("vectorFileId", "=", filters.vectorFileId);
+  
       if (filters.category && filters.category.length > 0) {
         filters.category.forEach((cat, index) => {
           const placeholder = `:cat${index}`;
@@ -338,24 +335,22 @@ export class AwsDynamoDBService {
         });
         expressionAttributeNames["#categories"] = "categories";
       }
-
+  
       const requestedAmountOperator = filters.requestedAmountOperator || "=";
       const rewardOperator = filters.rewardOperator || "=";
-
+  
       const validOperators = new Set(["=", "<", "<=", ">", ">="]);
-
+  
       if (filters.requestedAmount) {
         if (validOperators.has(requestedAmountOperator)) {
           const placeholder = `:requestedAmount`;
           filterExpression += filterExpression ? " AND " : "";
           filterExpression += `#requestedAmount ${requestedAmountOperator} ${placeholder}`;
-          expressionAttributeValues[placeholder] = {
-            N: filters.requestedAmount,
-          };
+          expressionAttributeValues[placeholder] = { N: filters.requestedAmount };
           expressionAttributeNames["#requestedAmount"] = "requestedAmount";
         }
       }
-
+  
       if (filters.reward) {
         if (validOperators.has(rewardOperator)) {
           const placeholder = `:reward`;
@@ -365,18 +360,17 @@ export class AwsDynamoDBService {
           expressionAttributeNames["#reward"] = "reward";
         }
       }
-
+  
       const today = new Date().toISOString().split("T")[0]; // Format: yyyy-mm-dd
       if (filters.startDate) {
-        const startDate =
-          filters.startDate === "today" ? today : filters.startDate;
+        const startDate = filters.startDate === "today" ? today : filters.startDate;
         const placeholder = `:startDate`;
         filterExpression += filterExpression ? " AND " : "";
         filterExpression += `#creationDate >= ${placeholder}`;
         expressionAttributeValues[placeholder] = { S: startDate };
         expressionAttributeNames["#creationDate"] = "creationDate";
       }
-
+  
       if (filters.endDate) {
         const endDate = filters.endDate === "today" ? today : filters.endDate;
         const placeholder = `:endDate`;
@@ -385,28 +379,35 @@ export class AwsDynamoDBService {
         expressionAttributeValues[placeholder] = { S: endDate };
         expressionAttributeNames["#creationDate"] = "creationDate";
       }
-
+  
       const params: any = {
         TableName: tableName,
       };
-
+  
       if (filterExpression) {
         params.FilterExpression = filterExpression;
         params.ExpressionAttributeValues = expressionAttributeValues;
         params.ExpressionAttributeNames = expressionAttributeNames;
       }
-
+  
       console.log("DynamoDB Query Params:", JSON.stringify(params, null, 2));
-
+  
       const command = new ScanCommand(params);
       const result = await this.dynamoDBClient.send(command);
-
-      const transformedItems = result.Items?.map(this.dynamoDBToJSON);
-
+  
+      let transformedItems = result.Items?.map(this.dynamoDBToJSON) || [];
+  
+      transformedItems.sort((a, b) => {
+        const dateA = new Date(a.creationDate).getTime();
+        const dateB = new Date(b.creationDate).getTime();
+        return dateB - dateA;
+      });
+  
       return transformedItems;
     } catch (err) {
       console.error("Error getting Filtered Posts:", err);
       throw err;
     }
   };
+  
 }

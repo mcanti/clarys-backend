@@ -1,12 +1,8 @@
-export const jsonToBlob = (jsonObject: JSON)=> {
+export const jsonToBlob = (jsonObject: Record<string, unknown>): Blob => {
+  const jsonString = JSON.stringify(jsonObject);
+  return new Blob([jsonString], { type: "application/json" });
+};
 
-    const jsonString = JSON.stringify(jsonObject);
-
-    const blob = new Blob([jsonString], { type: 'application/json' });
-
-    return blob;
-}
-
-export const fileToBlob = (file) => {
-    return new Blob([file], { type: typeof file });
-}
+export const fileToBlob = (file: string | ArrayBuffer | Uint8Array): Blob => {
+  return new Blob([file], { type: typeof file });
+};

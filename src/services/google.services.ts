@@ -56,31 +56,32 @@ export class GoogleServices {
       const exportUrl = `https://docs.google.com/document/d/${fileId}/export?format=docx`;
       const response = await axios.get(exportUrl, {
         responseType: "stream",
-        httpsAgent: agent
+        httpsAgent: agent,
       });
-
+  
       if (response.status !== 200) {
         throw new Error(
           `Failed to download file, status code: ${response.status}`
         );
       }
-
-      console.log("Google File found , fileId:", fileId);;
-
+  
+      console.log("Google File found, fileId:", fileId);
+  
       const fileStream = new Stream.PassThrough();
       response.data.pipe(fileStream);
-
+  
       const bufferDoc = await this.streamToBuffer(fileStream);
-
+  
       await this.awsStorageService.uploadFilesToS3(
         bufferDoc,
         `${folderDocs}/${fileId}.docx`,
         "application/docx"
       );
-    } catch (error) {
-      console.error("Error failed to download file and uploading it:", error.response);
+    } catch (error: any) {
+      console.error("Error failed to download file and uploading it:", error);
+      throw new Error("Download failed");
     }
-  }
+  }  
 
   async scrapeGoogleDriveFolder(
     url: string

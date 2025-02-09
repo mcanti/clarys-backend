@@ -9,8 +9,8 @@ export interface PostByAddressParamsInterface {
 
 export interface ListOnChainPostsParamsInterface {
     proposalType: string,
-    trackStatus: string,
-    trackNo: number,
+    trackStatus?: string,
+    trackNo?: number,
     page: number,
     listingLimit: number,
     sortBy: string

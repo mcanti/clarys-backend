@@ -12,21 +12,28 @@ export const mapWithConcurrency = async <T, R>(
   iteratorFn: (item: T) => Promise<R>,
   concurrency: number
 ): Promise<R[]> => {
-  const results: R[] = [];
+  const results: R[] = new Array(array.length);
   const executing: Promise<void>[] = [];
+  
+  let i = 0;
+  
+  const executeTask = async (index: number) => {
+    results[index] = await iteratorFn(array[index]);
+  };
 
-  for (const item of array) {
-    const p = (async () => {
-      results.push(await iteratorFn(item));
-    })();
+  for (; i < array.length; i++) {
+    const task = executeTask(i);
+    executing.push(task);
 
-    executing.push(p);
     if (executing.length >= concurrency) {
       await Promise.race(executing);
-      executing.splice(0, executing.length - concurrency + 1);
+      executing.splice(
+        executing.findIndex((p) => p === task),
+        1
+      );
     }
   }
 
-  await Promise.allSettled(executing);
+  await Promise.all(executing);
   return results;
 };

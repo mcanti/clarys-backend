@@ -17,7 +17,7 @@ import { validateSchema } from "../middleware/validator.middleware";
 import { FileService } from "../services/file.service";
 import { GoogleServices } from "../services/google.services";
 import {
-  findFiledId,
+  findFileId,
   findGoogleDocsLinks,
 } from "../helpers/googleDocsLinksFinder.helper";
 

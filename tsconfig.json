@@ -2,7 +2,7 @@
     "compilerOptions": {
         "target": "ES2021",
         "lib": ["ES2021", "DOM"],
-        "types": ["reflect-metadata"],
+        "types": ["reflect-metadata", "jest"],
         "experimentalDecorators": true,
         "emitDecoratorMetadata": true,
 

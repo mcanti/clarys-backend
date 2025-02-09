@@ -23,7 +23,7 @@ import {
 } from "../constants/proposalTypes";
 
 import {
-  findFiledId,
+  findFileId,
   findGoogleDocsLinks,
 } from "../helpers/googleDocsLinksFinder.helper";
 import { delay, mapWithConcurrency } from "../helpers/utilsFunctions.helper";
@@ -381,7 +381,7 @@ export class SchedulerService {
                       ) {
                         const filesIds = [];
                         splitUrls.forEach((googleDocUrl) => {
-                          const fieldId = findFiledId(`https${googleDocUrl}`);
+                          const fieldId = findFileId(`https${googleDocUrl}`);
                           if (!fieldId) {
                             console.log("Invalid Google Docs URL provided.");
                           } else {
@@ -491,7 +491,7 @@ export class SchedulerService {
                       ) {
                         const filesIds = [];
                         splitUrls.forEach((googleDocUrl) => {
-                          const fieldId = findFiledId(`https${googleDocUrl}`);
+                          const fieldId = findFileId(`https${googleDocUrl}`);
                           if (!fieldId) {
                             console.log("Invalid Google Docs URL provided.");
                           } else {
@@ -643,7 +643,7 @@ export class SchedulerService {
 
                         if (googleDocsMatches.length > 0) {
                           googleDocsMatches.forEach((googleDocUrl) => {
-                            const fieldId = findFiledId(googleDocUrl);
+                            const fieldId = findFileId(googleDocUrl);
                             if (!fieldId) {
                               console.log("Invalid Google Docs URL provided.");
                             } else {
@@ -759,7 +759,7 @@ export class SchedulerService {
 
                     if (googleDocsMatches.length > 0) {
                       googleDocsMatches.forEach((googleDocUrl) => {
-                        const fieldId = findFiledId(googleDocUrl);
+                        const fieldId = findFileId(googleDocUrl);
                         if (!fieldId) {
                           console.log("Invalid Google Docs URL provided.");
                         } else {

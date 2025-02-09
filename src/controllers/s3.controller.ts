@@ -69,7 +69,6 @@ export class S3Controller extends BaseHttpController {
           throw new Error("data.Body is not a readable stream.");
         }
 
-        return response;
       } else {
         const jsonData = await streamToString(response.Body as Readable);
         const parsedData = JSON.parse(jsonData);
@@ -131,7 +130,8 @@ export class S3Controller extends BaseHttpController {
               }
             }
           }
-        }).filter((item) => item != null)
+        })
+        .filter((item) => item != null);
 
       return {
         numberOfProposals: filteredFiles.length,
@@ -249,6 +249,10 @@ export class S3Controller extends BaseHttpController {
     try {
       const response = await this._s3GetFile(key);
 
+      if (!response || !response.Body) {
+        return res.apiError(ResponseWrapperCode.generalError, 404);
+      }
+
       const docName = key.split("/");
 
       if (key.includes("docx")) {
@@ -358,7 +362,11 @@ export class S3Controller extends BaseHttpController {
     try {
       const response = await this._s3GetListOfProposals("files");
 
-      return res.apiSuccess(response);
+      if (response) {
+        return res.apiSuccess(response);
+      } else {
+        return res.apiError(ResponseWrapperCode.generalError);
+      }
     } catch (err) {
       console.error("Error - s3ListFilesAndFolders: ", err);
 

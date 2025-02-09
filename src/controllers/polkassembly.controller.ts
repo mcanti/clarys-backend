@@ -23,7 +23,7 @@ import { validateSchema } from "../middleware/validator.middleware";
 
 import { GoogleServices } from "../services/google.services";
 import {
-  findFiledId,
+  findFileId,
   findGoogleDocsLinks,
 } from "../helpers/googleDocsLinksFinder.helper";
 import { findGoogleDriveDocsLinks } from "../helpers/googleDriveDocsLinksFinder.helper";
@@ -71,7 +71,7 @@ export class PolkassemblyController extends BaseHttpController {
 
       const filesIds = [];
       googleDocsLinks.forEach((googleDocUrl) => {
-        const fieldId = findFiledId(googleDocUrl);
+        const fieldId = findFileId(googleDocUrl);
         if (!fieldId) {
           console.log("Invalid Google Docs URL provided.");
         } else {
@@ -370,7 +370,7 @@ export class PolkassemblyController extends BaseHttpController {
 
       const filesIds = [];
       googleDocsLinks.forEach((googleDocUrl) => {
-        const fieldId = findFiledId(googleDocUrl);
+        const fieldId = findFileId(googleDocUrl);
         if (!fieldId) {
           console.log("Invalid Google Docs URL provided.");
         } else {

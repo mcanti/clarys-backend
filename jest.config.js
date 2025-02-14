@@ -11,10 +11,10 @@ module.exports = {
     // '**/tests/config/*.test.ts',
     '**/tests/controllers/*.test.ts',
     '**/tests/helpers/*.test.ts',
-    // '**/tests/interfaces/*.test.ts',
+    '**/tests/interfaces/*.test.ts',
     '**/tests/middleware/*.test.ts',
     '**/tests/services/*.test.ts',
-    '<rootDir>/src/**/*.spec.ts'
+    // '<rootDir>/src/**/*.spec.ts'
   ],
   setupFiles: ['<rootDir>/jest.setup.js']
 };

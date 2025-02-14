@@ -87,13 +87,26 @@ export class PolkassemblyController extends BaseHttpController {
         );
       }
 
-      if (response?.comments) {
-        delete response.comments;
-      }
+      //Ensure that even if we can't access or download the file we save the links
+      const urls = [...googleDocsLinks, ...googleDriveLinks];
+      const data = {
+        urls: urls,
+      };
 
-      if (response?.post_reactions) {
-        delete response.post_reactions;
-      }
+      const dataBuffer = Buffer.from(JSON.stringify(data));
+      await this.awsStorageService.uploadFilesToS3(
+        dataBuffer,
+        `${folderDocs}/docs_urls.json`,
+        "application/json"
+      );
+
+      // if (response?.comments) {
+      //   delete response.comments;
+      // }
+
+      // if (response?.post_reactions) {
+      //   delete response.post_reactions;
+      // }
 
       if (response?.proposed_call) {
         delete response.proposed_call;
@@ -366,7 +379,13 @@ export class PolkassemblyController extends BaseHttpController {
         postId,
       });
 
-      const googleDocsLinks = findGoogleDocsLinks(response.content);
+      let googleDocsLinks = [];
+      let googleDriveLinks = [];
+
+      if (response?.content) {
+        googleDocsLinks = findGoogleDocsLinks(response.content);
+        googleDriveLinks = findGoogleDriveDocsLinks(response.content);
+      }
 
       const filesIds = [];
       googleDocsLinks.forEach((googleDocUrl) => {
@@ -384,6 +403,35 @@ export class PolkassemblyController extends BaseHttpController {
             await this.googleService.uploadGoogleDocToS3(fileId, folderDocs);
           })
         );
+      }
+
+      //Ensure that even if we can't access or download the file we save the link
+      const urls = [...googleDocsLinks, ...googleDriveLinks];
+      const data = {
+        urls: urls,
+      };
+
+      const dataBuffer = Buffer.from(JSON.stringify(data));
+      await this.awsStorageService.uploadFilesToS3(
+        dataBuffer,
+        `${folderDocs}/docs_urls.json`,
+        "application/json"
+      );
+
+      // if (response?.comments) {
+      //   delete response.comments;
+      // }
+
+      // if (response?.post_reactions) {
+      //   delete response.post_reactions;
+      // }
+
+      if (response?.proposed_call) {
+        delete response.proposed_call;
+      }
+
+      if (response?.profile) {
+        delete response.profile;
       }
 
       const buffer = Buffer.from(JSON.stringify(response));

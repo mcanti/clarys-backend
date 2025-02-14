@@ -119,67 +119,88 @@ export class AwsDynamoDBService {
       post: Record<string, any>; // Allow mixed types in post object
     }
   ) => {
-    try {
-      const categoriesAsDynamoDBList = item.categories.map((category) => ({
-        S: category,
-      }));
-
-      const docsLinksAsDynamoDBList = item.docsLinks.map((link) => ({ S: link }));
-
-      const convertToDynamoDBFormat = (data: any): any => {
-        if (data === null || data === undefined) {
-          return { NULL: true };
-        } else if (typeof data === "string") {
-          return { S: data };
-        } else if (typeof data === "number") {
-          return { N: data.toString() };
-        } else if (typeof data === "boolean") {
-          return { BOOL: data };
-        } else if (Array.isArray(data)) {
-          return { L: data.map((item) => convertToDynamoDBFormat(item)) };
-        } else if (typeof data === "object") {
-          return {
-            M: Object.entries(data).reduce((acc, [key, value]) => {
-              acc[key] = convertToDynamoDBFormat(value);
-              return acc;
-            }, {}),
-          };
-        } else {
-          throw new Error(`Unsupported data type: ${typeof data}`);
+    let retryCount = 0;
+    let maxRetries = 2;
+  
+    while (retryCount <= maxRetries) {
+      try {
+        if (retryCount === 1) {
+          console.log(`Retrying item ${item.postId} in table ${tableName} with no content attribute in post to reduce size...`);
+          if(item?.post?.content){
+            delete item.post.content;
+          }
         }
-      };
-
-      const postAsDynamoDBMap = convertToDynamoDBFormat(item.post);
-
-      const itemParams = {
-        postId: { S: item.postId },
-        creationDate: { S: item.creationDate },
-        type: { S: item.type },
-        subType: { S: item.subType },
-        categories: { L: categoriesAsDynamoDBList },
-        docsLinks: { L: docsLinksAsDynamoDBList },
-        requestedAmount: { S: item.requestedAmount },
-        reward: { S: item.reward },
-        submitter: { S: item.submitter },
-        vectorFileId: { S: item.vectorFileId },
-        json: postAsDynamoDBMap,
-      };
-
-      const params: PutItemCommandInput = {
-        TableName: tableName,
-        Item: itemParams,
-      };
-
-      const command = new PutItemCommand(params);
-      const addItemToTableResponse = await this.dynamoDBClient.send(command);
-      console.log("Item added successfully: ", addItemToTableResponse);
-
-      return addItemToTableResponse;
-    } catch (err) {
-      console.error("Error adding item:", err);
-      return null;
+        if (retryCount === 2) {
+          console.log(`Retrying item ${item.postId} in table ${tableName} with null post to reduce size...`);
+          item.post = null;
+        }
+        const categoriesAsDynamoDBList = item.categories.map((category) => ({ S: category }));
+        const docsLinksAsDynamoDBList = item.docsLinks.map((link) => ({ S: link }));
+  
+        const convertToDynamoDBFormat = (data: any): any => {
+          if (data === null || data === undefined) {
+            return { NULL: true };
+          } else if (typeof data === "string") {
+            return { S: data };
+          } else if (typeof data === "number") {
+            return { N: data.toString() };
+          } else if (typeof data === "boolean") {
+            return { BOOL: data };
+          } else if (Array.isArray(data)) {
+            return { L: data.map((item) => convertToDynamoDBFormat(item)) };
+          } else if (typeof data === "object") {
+            return {
+              M: Object.entries(data).reduce((acc, [key, value]) => {
+                acc[key] = convertToDynamoDBFormat(value);
+                return acc;
+              }, {}),
+            };
+          } else {
+            throw new Error(`Unsupported data type: ${typeof data}`);
+          }
+        };
+  
+        const postAsDynamoDBMap = convertToDynamoDBFormat(item.post);
+  
+        const itemParams = {
+          postId: { S: item.postId },
+          creationDate: { S: item.creationDate },
+          type: { S: item.type },
+          subType: { S: item.subType },
+          categories: { L: categoriesAsDynamoDBList },
+          docsLinks: { L: docsLinksAsDynamoDBList },
+          requestedAmount: { S: item.requestedAmount },
+          reward: { S: item.reward },
+          submitter: { S: item.submitter },
+          vectorFileId: { S: item.vectorFileId },
+          json: postAsDynamoDBMap,
+        };
+  
+        const params: PutItemCommandInput = {
+          TableName: tableName,
+          Item: itemParams,
+        };
+  
+        const command = new PutItemCommand(params);
+        const addItemToTableResponse = await this.dynamoDBClient.send(command);
+        console.log("Item added successfully: ", addItemToTableResponse);
+  
+        return addItemToTableResponse;
+      } catch (err) {
+        console.error(`Error adding to table ${tableName} item ${item.postId}, Attempt ${retryCount + 1}:`, err);
+        retryCount++;
+        
+        if (retryCount > maxRetries) {
+          console.log("Final attempt failed. Item was not added.");
+          return null;
+        }
+        
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     }
   };
+  
 
   updateItemIntoTable = async (
     tableName: string,

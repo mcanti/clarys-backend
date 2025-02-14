@@ -125,20 +125,20 @@ if (cluster.isPrimary) {
   console.table(serverInfo);
 
   const scheduler = container.get<SchedulerService>(SchedulerService.name);
-  // scheduler.updateOnChainPosts();
-  // scheduler.updateOnChainPostFolder();
+  scheduler.updateOnChainPosts();
+  scheduler.updateOnChainPostFolder();
 
-  // scheduler.updateOffChainDiscussionsPosts();
-  // scheduler.updateOffChainDiscussionsPostFolder();
+  scheduler.updateOffChainDiscussionsPosts();
+  scheduler.updateOffChainDiscussionsPostFolder();
 
-  // scheduler.updateOffChainEventsPosts();
-  // scheduler.updateOffChainEventsAndSubEventsPostFolder();
+  scheduler.updateOffChainEventsPosts();
+  scheduler.updateOffChainEventsAndSubEventsPostFolder();
 
-  // scheduler.updateOffChainMeetUpEventsPosts();
-  // scheduler.updateOffChainMeetUpEventsPostFolder();
+  scheduler.updateOffChainMeetUpEventsPosts();
+  scheduler.updateOffChainMeetUpEventsPostFolder();
 
-  // scheduler.updateOnChainDataToVectorStore();
-  // scheduler.updateOffChainDataToVectorStore();
+  scheduler.updateOnChainDataToVectorStore();
+  scheduler.updateOffChainDataToVectorStore();
 
-  // scheduler.updateDynamoDb();
+  scheduler.updateDynamoDb();
 }

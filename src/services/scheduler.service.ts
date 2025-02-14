@@ -379,12 +379,14 @@ export class SchedulerService {
                           post.column_values.status?.index &&
                           post.column_values.status.index === 6)
                       ) {
+                        const urls = [];
                         const filesIds = [];
                         splitUrls.forEach((googleDocUrl) => {
                           const fieldId = findFileId(`https${googleDocUrl}`);
                           if (!fieldId) {
                             console.log("Invalid Google Docs URL provided.");
                           } else {
+                            urls.push(`https${googleDocUrl}`);
                             filesIds.push(fieldId);
                           }
                         });
@@ -401,6 +403,17 @@ export class SchedulerService {
                             })
                           );
                         }
+
+                        //Ensure that even if we can't access or download the file we save the links
+                        const data = {
+                          urls: urls,
+                        };
+                        const dataBuffer = Buffer.from(JSON.stringify(data));
+                        await this.awsStorageService.uploadFilesToS3(
+                          dataBuffer,
+                          `${folderDocsFile}/docs_urls.json`,
+                          "application/json"
+                        );
                       } else {
                         let folderDocsJson = folderDocs + `${post.id}/docs`;
                         const completeUrls = [];
@@ -489,12 +502,14 @@ export class SchedulerService {
                           post.column_values.status?.index &&
                           post.column_values.status.index === 6)
                       ) {
+                        const urls = [];
                         const filesIds = [];
                         splitUrls.forEach((googleDocUrl) => {
                           const fieldId = findFileId(`https${googleDocUrl}`);
                           if (!fieldId) {
                             console.log("Invalid Google Docs URL provided.");
                           } else {
+                            urls.push(`https${googleDocUrl}`);
                             filesIds.push(fieldId);
                           }
                         });
@@ -511,6 +526,17 @@ export class SchedulerService {
                             })
                           );
                         }
+
+                        //Ensure that even if we can't access or download the file we save the links
+                        const data = {
+                          urls: urls,
+                        };
+                        const dataBuffer = Buffer.from(JSON.stringify(data));
+                        await this.awsStorageService.uploadFilesToS3(
+                          dataBuffer,
+                          `${folderDocsFile}/docs_urls.json`,
+                          "application/json"
+                        );
                       } else {
                         let folderDocsJson = folderDocs + `${post.id}/docs`;
                         const completeUrls = [];
@@ -576,272 +602,299 @@ export class SchedulerService {
 
   async updateOffChainMeetUpEventsPostFolder() {
     cron.schedule("0 */1 * * *", async () => {
-      console.log(
-        "Running scheduled updateOffChainMeetUpEventsPostFolder task ..."
-      );
+    console.log(
+      "Running scheduled updateOffChainMeetUpEventsPostFolder task ..."
+    );
 
-      try {
-        const proposalType = "meetups";
+    try {
+      const proposalType = "meetups";
 
-        const key = `OffChainPosts/${proposalType}/meetups-List.json`;
-        let folder = `OffChainPost/${proposalType}/`;
-        let folderDocs = `OffChainPost/${proposalType}/`;
+      const key = `OffChainPosts/${proposalType}/meetups-List.json`;
+      let folder = `OffChainPost/${proposalType}/`;
+      let folderDocs = `OffChainPost/${proposalType}/`;
 
-        const storedList = await this.s3Controller._s3GetFile(key);
+      const storedList = await this.s3Controller._s3GetFile(key);
 
-        const existingMeetUpsEventsPostsFolderList =
-          await this.s3Controller._s3ListFilesAndFolders(
-            "folders",
-            `OffChainPost/${proposalType}/`
-          );
+      const existingMeetUpsEventsPostsFolderList =
+        await this.s3Controller._s3ListFilesAndFolders(
+          "folders",
+          `OffChainPost/${proposalType}/`
+        );
 
-        if (storedList != null && typeof storedList != "string") {
-          if (storedList?.posts) {
-            console.log("Existing Data");
+      if (storedList != null && typeof storedList != "string") {
+        if (storedList?.posts) {
+          console.log("Existing Data");
 
-            if (
-              storedList?.modifiedPostsIds &&
-              storedList.modifiedPostsIds.length > 0
-            ) {
-              console.log("Updating changed data");
+          if (
+            storedList?.modifiedPostsIds &&
+            storedList.modifiedPostsIds.length > 0
+          ) {
+            console.log("Updating changed data");
 
-              await Promise.allSettled(
-                storedList.modifiedPostsIds.map(async (id) => {
-                  storedList.posts(async (post, index) => {
-                    if (post.id === id) {
-                      const splitUrls = [];
+            await Promise.allSettled(
+              storedList.modifiedPostsIds.map(async (id) => {
+                storedList.posts(async (post, index) => {
+                  if (post.id === id) {
+                    const splitUrls = [];
 
-                      if (post.proposalFolderlLink !== "") {
-                        const proposalLinks = post.proposalFolderlLink
-                          .split("https")
-                          .filter((part) => part !== "");
+                    if (post.proposalFolderlLink !== "") {
+                      const proposalLinks = post.proposalFolderlLink
+                        .split("https")
+                        .filter((part) => part !== "");
 
-                        proposalLinks.forEach((link) => {
-                          splitUrls.push(`https${link}`);
-                        });
-                      }
-
-                      if (post.reportFolderLink !== "") {
-                        const reportLinks = post.reportFolderLink
-                          .split("https")
-                          .filter((part) => part !== "");
-
-                        reportLinks.forEach((link) => {
-                          splitUrls.push(`https${link}`);
-                        });
-                      }
-
-                      for (
-                        let splitUrlsIndex = 0;
-                        splitUrlsIndex < splitUrls.length;
-                        splitUrlsIndex++
-                      ) {
-                        const filesIds = [];
-                        const googleDocsMatches = findGoogleDocsLinks(
-                          splitUrls[splitUrlsIndex]
-                        );
-
-                        if (googleDocsMatches.length > 0) {
-                          googleDocsMatches.forEach((googleDocUrl) => {
-                            const fieldId = findFileId(googleDocUrl);
-                            if (!fieldId) {
-                              console.log("Invalid Google Docs URL provided.");
-                            } else {
-                              filesIds.push(fieldId);
-                            }
-                          });
-                        }
-
-                        //saving files
-                        const savingFilesStatuses = [
-                          "Accepted",
-                          "Child Bounty awarded",
-                          "Rejected",
-                          "Cancelled",
-                          "Child Bounty added",
-                        ];
-
-                        if (savingFilesStatuses.includes(post.status)) {
-                          let folderDocsFile = folderDocs + `${post.id}/docs`;
-
-                          if (filesIds.length) {
-                            await Promise.all(
-                              filesIds.map(async (fileId) => {
-                                await this.googleService.uploadGoogleDocToS3(
-                                  fileId,
-                                  folderDocsFile
-                                );
-                              })
-                            );
-                          }
-                          const folderId = extractFolderId(
-                            splitUrls[splitUrlsIndex]
-                          );
-
-                          await this.googleService.processFilesFromFolder(
-                            folderId,
-                            `${folderDocs}${post.id}/docs/`
-                          );
-                        } else {
-                          let folderDocsJson = folderDocs + `${post.id}/docs`;
-                          const completeUrls = [];
-                          completeUrls.push(splitUrls[splitUrlsIndex]);
-
-                          const data = {
-                            urls: [completeUrls],
-                          };
-
-                          const buffer = Buffer.from(JSON.stringify(data));
-                          await this.awsStorageService.uploadFilesToS3(
-                            buffer,
-                            `${folderDocsJson}/docs_urls.json`,
-                            "application/json"
-                          );
-
-                          await this.fileService.saveDataToFile(
-                            `${folderDocsJson}/docs_urls.json`,
-                            data
-                          );
-                        }
-                      }
-
-                      const buffer = Buffer.from(JSON.stringify(post));
-
-                      let folderJson = folder + `${post.id}`;
-                      await this.awsStorageService.uploadFilesToS3(
-                        buffer,
-                        `${folderJson}/#${post.id}.json`,
-                        "application/json"
-                      );
-                    }
-                  });
-                })
-              );
-            } else if (
-              existingMeetUpsEventsPostsFolderList === null ||
-              (existingMeetUpsEventsPostsFolderList &&
-                existingMeetUpsEventsPostsFolderList.length === 0)
-            ) {
-              console.log("Updating all data");
-              await Promise.allSettled(
-                storedList.posts.map(async (post) => {
-                  const splitUrls = [];
-
-                  if (post.proposalFolderlLink !== "") {
-                    const proposalLinks = post.proposalFolderlLink
-                      .split("https")
-                      .filter((part) => part !== "");
-
-                    proposalLinks.forEach((link) => {
-                      splitUrls.push(`https${link}`);
-                    });
-                  }
-
-                  if (post.reportFolderLink !== "") {
-                    const reportLinks = post.reportFolderLink
-                      .split("https")
-                      .filter((part) => part !== "");
-
-                    reportLinks.forEach((link) => {
-                      splitUrls.push(`https${link}`);
-                    });
-                  }
-
-                  for (
-                    let splitUrlsIndex = 0;
-                    splitUrlsIndex < splitUrls.length;
-                    splitUrlsIndex++
-                  ) {
-                    const filesIds = [];
-                    const googleDocsMatches = findGoogleDocsLinks(
-                      splitUrls[splitUrlsIndex]
-                    );
-
-                    if (googleDocsMatches.length > 0) {
-                      googleDocsMatches.forEach((googleDocUrl) => {
-                        const fieldId = findFileId(googleDocUrl);
-                        if (!fieldId) {
-                          console.log("Invalid Google Docs URL provided.");
-                        } else {
-                          filesIds.push(fieldId);
-                        }
+                      proposalLinks.forEach((link) => {
+                        splitUrls.push(`https${link}`);
                       });
                     }
 
-                    //saving files
-                    const savingFilesStatuses = [
-                      "Accepted",
-                      "Child Bounty awarded",
-                      "Rejected",
-                      "Cancelled",
-                      "Child Bounty added",
-                    ];
+                    if (post.reportFolderLink !== "") {
+                      const reportLinks = post.reportFolderLink
+                        .split("https")
+                        .filter((part) => part !== "");
 
-                    if (savingFilesStatuses.includes(post.status)) {
-                      let folderDocsFile = folderDocs + `${post.id}/docs`;
+                      reportLinks.forEach((link) => {
+                        splitUrls.push(`https${link}`);
+                      });
+                    }
 
-                      if (filesIds.length) {
-                        await Promise.allSettled(
-                          filesIds.map(async (fileId) => {
-                            await this.googleService.uploadGoogleDocToS3(
-                              fileId,
-                              folderDocsFile
-                            );
-                          })
-                        );
-                      }
-                      const folderId = extractFolderId(
+                    const urls = [...splitUrls];
+
+                    for (
+                      let splitUrlsIndex = 0;
+                      splitUrlsIndex < splitUrls.length;
+                      splitUrlsIndex++
+                    ) {
+                      const filesIds = [];
+                      const googleDocsMatches = findGoogleDocsLinks(
                         splitUrls[splitUrlsIndex]
                       );
 
-                      await this.googleService.processFilesFromFolder(
-                        folderId,
-                        `${folderDocs}${post.id}/docs/`
-                      );
-                    } else {
-                      let folderDocsJson = folderDocs + `${post.id}/docs`;
-                      const completeUrls = [];
-                      completeUrls.push(splitUrls[splitUrlsIndex]);
+                      if (googleDocsMatches.length > 0) {
+                        googleDocsMatches.forEach((googleDocUrl) => {
+                          const fieldId = findFileId(googleDocUrl);
+                          if (!fieldId) {
+                            console.log("Invalid Google Docs URL provided.");
+                          } else {
+                            filesIds.push(fieldId);
+                          }
+                        });
+                      }
 
-                      const data = {
-                        urls: completeUrls,
-                      };
+                      //saving files
+                      const savingFilesStatuses = [
+                        "Accepted",
+                        "Child Bounty awarded",
+                        "Rejected",
+                        "Cancelled",
+                        "Child Bounty added",
+                      ];
 
-                      const buffer = Buffer.from(JSON.stringify(data));
-                      await this.awsStorageService.uploadFilesToS3(
-                        buffer,
-                        `${folderDocsJson}/docs_urls.json`,
-                        "application/json"
-                      );
+                      if (savingFilesStatuses.includes(post.status)) {
+                        let folderDocsFile = folderDocs + `${post.id}/docs`;
+
+                        if (filesIds.length) {
+                          await Promise.all(
+                            filesIds.map(async (fileId) => {
+                              await this.googleService.uploadGoogleDocToS3(
+                                fileId,
+                                folderDocsFile
+                              );
+                            })
+                          );
+                        }
+
+                        //Ensure that even if we can't access or download the file we save the links
+                        const data = {
+                          urls: urls,
+                        };
+
+                        const dataBuffer = Buffer.from(JSON.stringify(data));
+                        await this.awsStorageService.uploadFilesToS3(
+                          dataBuffer,
+                          `${folderDocsFile}/docs_urls.json`,
+                          "application/json"
+                        );
+
+                        const folderId = extractFolderId(
+                          splitUrls[splitUrlsIndex]
+                        );
+
+                        await this.googleService.processFilesFromFolder(
+                          folderId,
+                          `${folderDocs}${post.id}/docs/`
+                        );
+                      } else {
+                        let folderDocsJson = folderDocs + `${post.id}/docs`;
+                        const completeUrls = [];
+                        completeUrls.push(splitUrls[splitUrlsIndex]);
+
+                        const data = {
+                          urls: [completeUrls],
+                        };
+
+                        const buffer = Buffer.from(JSON.stringify(data));
+                        await this.awsStorageService.uploadFilesToS3(
+                          buffer,
+                          `${folderDocsJson}/docs_urls.json`,
+                          "application/json"
+                        );
+
+                        await this.fileService.saveDataToFile(
+                          `${folderDocsJson}/docs_urls.json`,
+                          data
+                        );
+                      }
                     }
+
+                    const buffer = Buffer.from(JSON.stringify(post));
+
+                    let folderJson = folder + `${post.id}`;
+                    await this.awsStorageService.uploadFilesToS3(
+                      buffer,
+                      `${folderJson}/#${post.id}.json`,
+                      "application/json"
+                    );
+                  }
+                });
+              })
+            );
+          } else if (
+            existingMeetUpsEventsPostsFolderList === null ||
+            (existingMeetUpsEventsPostsFolderList &&
+              existingMeetUpsEventsPostsFolderList.length === 0)
+          ) {
+            console.log("Updating all data");
+            await Promise.allSettled(
+              storedList.posts.map(async (post) => {
+                const splitUrls = [];
+
+                if (post.proposalFolderlLink !== "") {
+                  const proposalLinks = post.proposalFolderlLink
+                    .split("https")
+                    .filter((part) => part !== "");
+
+                  proposalLinks.forEach((link) => {
+                    splitUrls.push(`https${link}`);
+                  });
+                }
+
+                if (post.reportFolderLink !== "") {
+                  const reportLinks = post.reportFolderLink
+                    .split("https")
+                    .filter((part) => part !== "");
+
+                  reportLinks.forEach((link) => {
+                    splitUrls.push(`https${link}`);
+                  });
+                }
+
+                const urls = [...splitUrls];
+
+                for (
+                  let splitUrlsIndex = 0;
+                  splitUrlsIndex < splitUrls.length;
+                  splitUrlsIndex++
+                ) {
+                  const filesIds = [];
+                  const googleDocsMatches = findGoogleDocsLinks(
+                    splitUrls[splitUrlsIndex]
+                  );
+
+                  if (googleDocsMatches.length > 0) {
+                    googleDocsMatches.forEach((googleDocUrl) => {
+                      const fieldId = findFileId(googleDocUrl);
+                      if (!fieldId) {
+                        console.log("Invalid Google Docs URL provided.");
+                      } else {
+                        filesIds.push(fieldId);
+                      }
+                    });
                   }
 
-                  const buffer = Buffer.from(JSON.stringify(post));
+                  //saving files
+                  const savingFilesStatuses = [
+                    "Accepted",
+                    "Child Bounty awarded",
+                    "Rejected",
+                    "Cancelled",
+                    "Child Bounty added",
+                  ];
 
-                  let folderJson = folder + `${post.id}`;
-                  await this.awsStorageService.uploadFilesToS3(
-                    buffer,
-                    `${folderJson}/#${post.id}.json`,
-                    "application/json"
-                  );
-                })
-              );
-            }
+                  if (savingFilesStatuses.includes(post.status)) {
+                    let folderDocsFile = folderDocs + `${post.id}/docs`;
+
+                    if (filesIds.length) {
+                      await Promise.allSettled(
+                        filesIds.map(async (fileId) => {
+                          await this.googleService.uploadGoogleDocToS3(
+                            fileId,
+                            folderDocsFile
+                          );
+                        })
+                      );
+                    }
+
+                    //Ensure that even if we can't access or download the file we save the links
+                    const data = {
+                      urls: urls,
+                    };
+
+                    const dataBuffer = Buffer.from(JSON.stringify(data));
+                    await this.awsStorageService.uploadFilesToS3(
+                      dataBuffer,
+                      `${folderDocsFile}/docs_urls.json`,
+                      "application/json"
+                    );
+                    const folderId = extractFolderId(splitUrls[splitUrlsIndex]);
+
+                    await this.googleService.processFilesFromFolder(
+                      folderId,
+                      `${folderDocs}${post.id}/docs/`
+                    );
+                  } else {
+                    let folderDocsJson = folderDocs + `${post.id}/docs`;
+                    const completeUrls = [];
+                    completeUrls.push(splitUrls[splitUrlsIndex]);
+
+                    const data = {
+                      urls: completeUrls,
+                    };
+
+                    const buffer = Buffer.from(JSON.stringify(data));
+                    await this.awsStorageService.uploadFilesToS3(
+                      buffer,
+                      `${folderDocsJson}/docs_urls.json`,
+                      "application/json"
+                    );
+                  }
+                }
+
+                const buffer = Buffer.from(JSON.stringify(post));
+
+                let folderJson = folder + `${post.id}`;
+                await this.awsStorageService.uploadFilesToS3(
+                  buffer,
+                  `${folderJson}/#${post.id}.json`,
+                  "application/json"
+                );
+              })
+            );
           }
         }
-
-        console.log(
-          "Scheduled task updateOffChainMeetUpEventsPostFolder completed successfully."
-        );
-      } catch (err) {
-        console.log(
-          "Error executing scheduled updateOffChainMeetUpEventsPostFolder task:",
-          err
-        );
-        throw Error(
-          "Error executing scheduled updateOffChainMeetUpEventsPostFolder task"
-        );
       }
+
+      console.log(
+        "Scheduled task updateOffChainMeetUpEventsPostFolder completed successfully."
+      );
+    } catch (err) {
+      console.log(
+        "Error executing scheduled updateOffChainMeetUpEventsPostFolder task:",
+        err
+      );
+      throw Error(
+        "Error executing scheduled updateOffChainMeetUpEventsPostFolder task"
+      );
+    }
     });
   }
 

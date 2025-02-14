@@ -83,7 +83,9 @@ export class DynamoDBController extends BaseHttpController {
               const parsedData = JSON.parse(jsonData);
               if (!parsedData.posts) continue;
 
-              const addedItems = await Promise.all(
+              const addedItems = [];
+              
+              await Promise.all(
                 parsedData.posts.map(async (post, index) => {
                   const postId =
                     post.post_id?.toString() ||
@@ -108,7 +110,7 @@ export class DynamoDBController extends BaseHttpController {
                     jsonPostKey
                   );
 
-                  if (!jsonPostResponse || !response?.Body) {
+                  if (!jsonPostResponse || !jsonPostResponse?.Body) {
                     console.warn(`File not found: ${jsonPostKey}`);
                   } else {
                     const jsonPostData = await streamToString(
@@ -116,7 +118,22 @@ export class DynamoDBController extends BaseHttpController {
                     );
                     jsonPost = JSON.parse(jsonPostData);
 
-                    const docsLinks = [];
+                    //removing big structures from json before adding to db
+                    const fieldsToRemove = [
+                      "markdownContent",
+                      "statusHistory",
+                      "timeline",
+                      "comments",
+                      "post_reactions",
+                      "history"
+                    ];
+
+                    fieldsToRemove.forEach((field) => {
+                      if (jsonPost?.[field]) {
+                        delete jsonPost[field];
+                      }
+                    });
+
                     if (jsonPost?.content) {
                       const googleDocsLinks = findGoogleDocsLinks(
                         jsonPost.content
@@ -182,7 +199,7 @@ export class DynamoDBController extends BaseHttpController {
                     post.username ||
                     "";
 
-                  return this.awsDynamoDBService.addItemToTable(tableName, {
+                  const addedItem =  await this.awsDynamoDBService.addItemToTable(tableName, {
                     postId,
                     creationDate,
                     type:
@@ -196,8 +213,10 @@ export class DynamoDBController extends BaseHttpController {
                     submitter,
                     docsLinks,
                     vectorFileId: "",
-                    post: jsonPost ? jsonPost : post,
+                    post: jsonPost !== null ? jsonPost : post,
                   });
+
+                  addedItems.push(addedItem)
                 })
               );
 
@@ -210,7 +229,7 @@ export class DynamoDBController extends BaseHttpController {
       }
 
       console.log("Items added into DB");
-      
+
       return { dataAddedToTables };
     } catch (err) {
       console.error("Error - _addDataToDynamoDBTable:", err);
@@ -627,101 +646,101 @@ export class DynamoDBController extends BaseHttpController {
     }
   }
 
-/**
- * @swagger
- * /api/dynamoDB/retrieveData:
- *   get:
- *     tags:
- *       - DynamoDB
- *     summary: Get posts data
- *     parameters:
- *       - name: postId
- *         in: query
- *         required: false
- *         description: The ID of the post
- *         schema:
- *           type: string
- *       - name: type
- *         in: query
- *         required: false
- *         description: The type of the proposal
- *         schema:
- *           type: string
- *       - name: subType
- *         in: query
- *         required: false
- *         description: The subType of the proposal
- *         schema:
- *           type: string
- *       - name: category
- *         in: query
- *         required: false
- *         description: The category of the post
- *         schema:
- *           type: array
- *           items:
- *             type: string
- *       - name: requestedAmount
- *         in: query
- *         required: false
- *         description: The requested amount for the post
- *         schema:
- *           type: string
- *       - name: requestedAmountOperator
- *         in: query
- *         required: false
- *         description: The operator for requested amount comparison
- *         schema:
- *           type: string
- *       - name: reward
- *         in: query
- *         required: false
- *         description: The reward associated with the post
- *         schema:
- *           type: string
- *       - name: rewardOperator
- *         in: query
- *         required: false
- *         description: The operator for reward comparison
- *         schema:
- *           type: string
- *       - name: submitter
- *         in: query
- *         required: false
- *         description: The submitter of the post
- *         schema:
- *           type: string
- *       - name: startDate
- *         in: query
- *         required: false
- *         description: The start date for filtering posts
- *         schema:
- *           type: string
- *       - name: endDate
- *         in: query
- *         required: false
- *         description: The end date for filtering posts
- *         schema:
- *           type: string
- *       - name: vectorFileId
- *         in: query
- *         required: false
- *         description: The ID of the vector file
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Successfully retrieved the file
- *         content:
- *           application/octet-stream:
- *             schema:
- *               type: object
- *               format: binary
- *       404:
- *         description: Files not found
- *       500:
- *         description: Internal server error
- */
+  /**
+   * @swagger
+   * /api/dynamoDB/retrieveData:
+   *   get:
+   *     tags:
+   *       - DynamoDB
+   *     summary: Get posts data
+   *     parameters:
+   *       - name: postId
+   *         in: query
+   *         required: false
+   *         description: The ID of the post
+   *         schema:
+   *           type: string
+   *       - name: type
+   *         in: query
+   *         required: false
+   *         description: The type of the proposal
+   *         schema:
+   *           type: string
+   *       - name: subType
+   *         in: query
+   *         required: false
+   *         description: The subType of the proposal
+   *         schema:
+   *           type: string
+   *       - name: category
+   *         in: query
+   *         required: false
+   *         description: The category of the post
+   *         schema:
+   *           type: array
+   *           items:
+   *             type: string
+   *       - name: requestedAmount
+   *         in: query
+   *         required: false
+   *         description: The requested amount for the post
+   *         schema:
+   *           type: string
+   *       - name: requestedAmountOperator
+   *         in: query
+   *         required: false
+   *         description: The operator for requested amount comparison
+   *         schema:
+   *           type: string
+   *       - name: reward
+   *         in: query
+   *         required: false
+   *         description: The reward associated with the post
+   *         schema:
+   *           type: string
+   *       - name: rewardOperator
+   *         in: query
+   *         required: false
+   *         description: The operator for reward comparison
+   *         schema:
+   *           type: string
+   *       - name: submitter
+   *         in: query
+   *         required: false
+   *         description: The submitter of the post
+   *         schema:
+   *           type: string
+   *       - name: startDate
+   *         in: query
+   *         required: false
+   *         description: The start date for filtering posts
+   *         schema:
+   *           type: string
+   *       - name: endDate
+   *         in: query
+   *         required: false
+   *         description: The end date for filtering posts
+   *         schema:
+   *           type: string
+   *       - name: vectorFileId
+   *         in: query
+   *         required: false
+   *         description: The ID of the vector file
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Successfully retrieved the file
+   *         content:
+   *           application/octet-stream:
+   *             schema:
+   *               type: object
+   *               format: binary
+   *       404:
+   *         description: Files not found
+   *       500:
+   *         description: Internal server error
+   */
   @httpGet("/retrieveData")
   async retrieveData(
     @response() res: Response,

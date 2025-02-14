@@ -8,3 +8,4 @@ polkadot-440407-afc15f4b2e56.json
 Zscaler_Root_CA.pem
 .vercel
 .env*.local
+/coverage/

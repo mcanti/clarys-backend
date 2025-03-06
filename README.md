@@ -196,3 +196,12 @@ docker load -i your-image-name.tar
 ```bash
 podman load -i your-image-name.tar
 ```
+
+## Environment Configuration
+
+Ensure all required environment variables are properly configured in your `.env` file before starting the application.
+
+## Google Storage Service
+
+Ensure to create and set up the Project and Cloud Storage Service Account for accessing Google Strorage from https://console.cloud.google.com/storage and import the settings in your `.polkadot-440407-afc15f4b2e56.json` file before starting the application.
+

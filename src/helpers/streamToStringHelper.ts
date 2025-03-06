@@ -5,11 +5,28 @@ import { GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { BlobLike, ResponseLike } from "openai/uploads";
 
 export const streamToString = async (stream: Readable): Promise<string> => {
-  const chunks: Uint8Array[] = [];
+  const chunks: Buffer[] = [];
+
   return new Promise((resolve, reject) => {
-    stream.on('data', (chunk) => chunks.push(chunk));
-    stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-    stream.on('error', reject);
+    const handleError = (error: Error) => {
+      stream.removeAllListeners(); // Ensure no more events are fired
+      reject(error);
+    };
+
+    stream.on("data", (chunk) => {
+      if (Buffer.isBuffer(chunk)) {
+        chunks.push(chunk);
+      } else if (chunk instanceof Uint8Array) {
+        chunks.push(Buffer.from(chunk));
+      } else if (typeof chunk === "string") {
+        chunks.push(Buffer.from(chunk, "utf-8"));
+      } else {
+        handleError(new Error(`Unsupported chunk type: ${typeof chunk}`));
+      }
+    });
+
+    stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+    stream.on("error", handleError);
   });
 };
 
@@ -124,34 +141,32 @@ export const ensureReadableStream = (body: any): Readable => {
   }
 };
 
-export const mimicFsCreateReadStream = (body: Readable, filePath: string): Readable =>{
-  const passThroughStream = new PassThrough();
-
-  body.pipe(passThroughStream); // Pipe the S3 stream into the PassThrough stream
-
-  // Add properties to mimic `fs.createReadStream`
-  (passThroughStream as any).fd = 'null'; // Mimic the file descriptor
-  (passThroughStream as any).path = filePath; // Mimic the file path
-  (passThroughStream as any).flags = 'r'; // Mimic file flags (read-only)
-  (passThroughStream as any).mode = 438; // Mimic file mode (default 0666 in octal, 438 in decimal)
-  (passThroughStream as any).start = undefined; // Start position (undefined for full stream)
-  (passThroughStream as any).end = Infinity; // End position (infinite for full stream)
-  (passThroughStream as any).pos = undefined; // Current position in the file
-  (passThroughStream as any).bytesRead = 0; // Bytes read so far
-
-  return passThroughStream;
-}
-
-export const webStreamToNodeReadable = async(webStream: ReadableStream<any>): Promise<Readable> =>{
+export const webStreamToNodeReadable = async (webStream: ReadableStream<any>): Promise<Readable> => {
   const reader = webStream.getReader();
-  return new Readable({
-    async read() {
-      const { done, value } = await reader.read();
-      if (done) {
-        this.push(null); // End of stream
-      } else {
-        this.push(value); // Push the data into the Node.js readable stream
-      }
-    },
+
+  return new Promise((resolve, reject) => {
+    const nodeStream = new Readable({
+      async read() {
+        try {
+          const { done, value } = await reader.read();
+          if (done) {
+            this.push(null);
+          } else {
+            this.push(value);
+          }
+        } catch (error) {
+          this.destroy(error);
+        }
+      },
+    });
+
+    reader.closed
+      .then(() => resolve(nodeStream))
+      .catch((error) => {
+        nodeStream.destroy(error);
+        reject(error);
+      });
+
+    nodeStream.on("error", reject);
   });
-}
+};

@@ -54,6 +54,14 @@ export class AwsDynamoDBService {
   private readonly dynamoDBClient: DynamoDBClient;
 
   constructor() {
+    if (!process.env.AWS_ACCESS_KEY_ID) {
+      throw new Error("AWS_ACCESS_KEY_ID missing");
+    }
+  
+    if (!process.env.AWS_SECRET_ACCESS_KEY) {
+      throw new Error("AWS_SECRET_ACCESS_KEY missing");
+    }
+  
     const config = new Config().getConfig();
     this.dynamoDBClient = new DynamoDBClient({
       region: config.region,
@@ -62,10 +70,14 @@ export class AwsDynamoDBService {
         httpsAgent: agent,
       }),
     });
-  }
+  }  
 
   createDynamoDBTableIfNotExists = async (tableName: string) => {
     console.log("tableName", tableName);
+    if (!tableName) {
+      console.error("Table name cannot be empty");
+      return { error: "Table name cannot be empty" };
+    }
 
     try {
       const command = new DescribeTableCommand({ TableName: tableName });
@@ -98,7 +110,7 @@ export class AwsDynamoDBService {
         return createTableResponse;
       } else {
         console.error(`Failed to describe or create table: ${err.message}`);
-        return null;
+        return {"error": "AWS Create Table Error"}
       }
     }
   };
@@ -219,6 +231,16 @@ export class AwsDynamoDBService {
     }
   ) => {
     try {
+      if (!item.postId) {
+        console.error("Missing postId in update request");
+        return { error: "Missing postId in update request" };
+      }
+
+      if (!item.creationDate || !item.type) {
+        console.error("Missing required fields in update request");
+        return { error: "Missing required fields in update request" };
+      }
+      
       const convertToDynamoDBFormat = (data) => {
         if (data === null || data === undefined) {
           return { NULL: true };
@@ -283,13 +305,14 @@ export class AwsDynamoDBService {
       return updateResponse;
     } catch (err) {
       console.error("Error updating item:", err);
-      return null;
+      return { error: err.message };
     }
   };
   
   
   dynamoDBToJSON = (dynamoItem: Record<string, any>): any => {
     const transformValue = (value: any): any => {
+      if (value.B !== undefined) return Buffer.from(value.B).toString("base64");
       if (value.S !== undefined) return value.S;
       if (value.N !== undefined) return Number(value.N);
       if (value.BOOL !== undefined) return value.BOOL;
@@ -415,8 +438,9 @@ export class AwsDynamoDBService {
   
       const command = new ScanCommand(params);
       const result = await this.dynamoDBClient.send(command);
-  
-      let transformedItems = result.Items?.map(this.dynamoDBToJSON) || [];
+
+      let transformedItems = Array.isArray(result.Items) ? result.Items.map(this.dynamoDBToJSON) : [];
+
   
       transformedItems.sort((a, b) => {
         const dateA = new Date(a.creationDate).getTime();

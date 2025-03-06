@@ -93,6 +93,23 @@ describe("responseWrapper middleware", () => {
     );
   });
 
+  it("should use default status 400 when apiError is called without a status", () => {
+    responseWrapper(req as Request, res as Response, next);
+
+    const mockError = ResponseWrapperCode.generalError;
+    const mockDetails = { error: "Something went wrong" };
+
+    res.apiError(mockError, undefined, mockDetails);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorCode: mockError,
+        response: mockDetails,
+      })
+    );
+});
+
   it("should call res.status with the provided status and res.json with ApiResponse when apiError is called", () => {
     responseWrapper(req as Request, res as Response, next);
 

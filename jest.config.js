@@ -8,7 +8,7 @@ module.exports = {
   },
   testMatch: [
     // '**/tests/**/*.test.ts',
-    // '**/tests/config/*.test.ts',
+    '**/tests/config/*.test.ts',
     '**/tests/controllers/*.test.ts',
     '**/tests/helpers/*.test.ts',
     '**/tests/interfaces/*.test.ts',

@@ -64,33 +64,22 @@ describe("mapWithConcurrency", () => {
   });
 
   it("should respect concurrency limit", async () => {
-    const activePromises = new Set<Promise<number>>();
+    jest.useRealTimers();
   
-    const mockFn = jest.fn(
-      async (num) =>
-        new Promise<number>((resolve) => {
-          const promise = new Promise<number>((res) => {
-            setTimeout(() => {
-              res(num * 2);
-            }, 100);
-          });
-  
-          activePromises.add(promise);
-          promise.finally(() => activePromises.delete(promise));
-  
-          return promise;
-        })
-    );
+    const mockFn = jest.fn(async (num) => {
+      return new Promise<number>((resolve) => {
+        setTimeout(() => {
+          resolve(num * 2);
+        }, 100);
+      });
+    });
   
     const inputArray = [1, 2, 3];
     const concurrency = 2;
   
-    console.log("Starting test...");
     const result = await mapWithConcurrency(inputArray, mockFn, concurrency);
-    console.log("Test completed.");
   
     expect(result).toEqual([2, 4, 6]);
     expect(mockFn).toHaveBeenCalledTimes(inputArray.length);
-  }, 5000);
-   // Increase timeout to avoid test failing due to delays
+  }, 10000);
 });

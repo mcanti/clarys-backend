@@ -64,7 +64,7 @@ export class SchedulerService {
       console.log("Running scheduled task...");
 
       try {
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           proposalTypeList.map(async (proposalType) => {
             await this.polkassemblyController._findOnChainPosts(
               proposalType,
@@ -74,6 +74,18 @@ export class SchedulerService {
             console.log(`Updated ${proposalType}-List`);
           })
         );
+
+        console.log("All Promises are settled");
+        
+        // Check if any task failed
+        const failedTasks = results.filter(
+          (result) => result.status === "rejected"
+        );
+        if (failedTasks.length > 0) {
+          throw new Error(
+            `Some tasks failed: ${failedTasks.map((t) => t.reason).join(", ")}`
+          );
+        }
 
         console.log("Scheduled task completed successfully.");
       } catch (err) {
@@ -88,13 +100,25 @@ export class SchedulerService {
       console.log("Running scheduled updateOffChainDiscussionsPosts task...");
 
       try {
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           offChainPolkassemblyTypeList.map(async (proposalType) => {
             await this.polkassemblyController._findOffChainPosts(proposalType);
 
             console.log(`Updated ${proposalType}-List`);
           })
         );
+
+        console.log("All Promises are settled");
+        
+        // Check if any task failed
+        const failedTasks = results.filter(
+          (result) => result.status === "rejected"
+        );
+        if (failedTasks.length > 0) {
+          throw new Error(
+            `Some tasks failed: ${failedTasks.map((t) => t.reason).join(", ")}`
+          );
+        }
 
         console.log(
           "Scheduled updateOffChainDiscussionsPosts task completed successfully."
@@ -602,299 +626,301 @@ export class SchedulerService {
 
   async updateOffChainMeetUpEventsPostFolder() {
     cron.schedule("0 */1 * * *", async () => {
-    console.log(
-      "Running scheduled updateOffChainMeetUpEventsPostFolder task ..."
-    );
+      console.log(
+        "Running scheduled updateOffChainMeetUpEventsPostFolder task ..."
+      );
 
-    try {
-      const proposalType = "meetups";
+      try {
+        const proposalType = "meetups";
 
-      const key = `OffChainPosts/${proposalType}/meetups-List.json`;
-      let folder = `OffChainPost/${proposalType}/`;
-      let folderDocs = `OffChainPost/${proposalType}/`;
+        const key = `OffChainPosts/${proposalType}/meetups-List.json`;
+        let folder = `OffChainPost/${proposalType}/`;
+        let folderDocs = `OffChainPost/${proposalType}/`;
 
-      const storedList = await this.s3Controller._s3GetFile(key);
+        const storedList = await this.s3Controller._s3GetFile(key);
 
-      const existingMeetUpsEventsPostsFolderList =
-        await this.s3Controller._s3ListFilesAndFolders(
-          "folders",
-          `OffChainPost/${proposalType}/`
-        );
+        const existingMeetUpsEventsPostsFolderList =
+          await this.s3Controller._s3ListFilesAndFolders(
+            "folders",
+            `OffChainPost/${proposalType}/`
+          );
 
-      if (storedList != null && typeof storedList != "string") {
-        if (storedList?.posts) {
-          console.log("Existing Data");
+        if (storedList != null && typeof storedList != "string") {
+          if (storedList?.posts) {
+            console.log("Existing Data");
 
-          if (
-            storedList?.modifiedPostsIds &&
-            storedList.modifiedPostsIds.length > 0
-          ) {
-            console.log("Updating changed data");
+            if (
+              storedList?.modifiedPostsIds &&
+              storedList.modifiedPostsIds.length > 0
+            ) {
+              console.log("Updating changed data");
 
-            await Promise.allSettled(
-              storedList.modifiedPostsIds.map(async (id) => {
-                storedList.posts(async (post, index) => {
-                  if (post.id === id) {
-                    const splitUrls = [];
+              await Promise.allSettled(
+                storedList.modifiedPostsIds.map(async (id) => {
+                  storedList.posts(async (post, index) => {
+                    if (post.id === id) {
+                      const splitUrls = [];
 
-                    if (post.proposalFolderlLink !== "") {
-                      const proposalLinks = post.proposalFolderlLink
-                        .split("https")
-                        .filter((part) => part !== "");
+                      if (post.proposalFolderlLink !== "") {
+                        const proposalLinks = post.proposalFolderlLink
+                          .split("https")
+                          .filter((part) => part !== "");
 
-                      proposalLinks.forEach((link) => {
-                        splitUrls.push(`https${link}`);
-                      });
-                    }
-
-                    if (post.reportFolderLink !== "") {
-                      const reportLinks = post.reportFolderLink
-                        .split("https")
-                        .filter((part) => part !== "");
-
-                      reportLinks.forEach((link) => {
-                        splitUrls.push(`https${link}`);
-                      });
-                    }
-
-                    const urls = [...splitUrls];
-
-                    for (
-                      let splitUrlsIndex = 0;
-                      splitUrlsIndex < splitUrls.length;
-                      splitUrlsIndex++
-                    ) {
-                      const filesIds = [];
-                      const googleDocsMatches = findGoogleDocsLinks(
-                        splitUrls[splitUrlsIndex]
-                      );
-
-                      if (googleDocsMatches.length > 0) {
-                        googleDocsMatches.forEach((googleDocUrl) => {
-                          const fieldId = findFileId(googleDocUrl);
-                          if (!fieldId) {
-                            console.log("Invalid Google Docs URL provided.");
-                          } else {
-                            filesIds.push(fieldId);
-                          }
+                        proposalLinks.forEach((link) => {
+                          splitUrls.push(`https${link}`);
                         });
                       }
 
-                      //saving files
-                      const savingFilesStatuses = [
-                        "Accepted",
-                        "Child Bounty awarded",
-                        "Rejected",
-                        "Cancelled",
-                        "Child Bounty added",
-                      ];
+                      if (post.reportFolderLink !== "") {
+                        const reportLinks = post.reportFolderLink
+                          .split("https")
+                          .filter((part) => part !== "");
 
-                      if (savingFilesStatuses.includes(post.status)) {
-                        let folderDocsFile = folderDocs + `${post.id}/docs`;
+                        reportLinks.forEach((link) => {
+                          splitUrls.push(`https${link}`);
+                        });
+                      }
 
-                        if (filesIds.length) {
-                          await Promise.all(
-                            filesIds.map(async (fileId) => {
-                              await this.googleService.uploadGoogleDocToS3(
-                                fileId,
-                                folderDocsFile
-                              );
-                            })
-                          );
-                        }
+                      const urls = [...splitUrls];
 
-                        //Ensure that even if we can't access or download the file we save the links
-                        const data = {
-                          urls: urls,
-                        };
-
-                        const dataBuffer = Buffer.from(JSON.stringify(data));
-                        await this.awsStorageService.uploadFilesToS3(
-                          dataBuffer,
-                          `${folderDocsFile}/docs_urls.json`,
-                          "application/json"
-                        );
-
-                        const folderId = extractFolderId(
+                      for (
+                        let splitUrlsIndex = 0;
+                        splitUrlsIndex < splitUrls.length;
+                        splitUrlsIndex++
+                      ) {
+                        const filesIds = [];
+                        const googleDocsMatches = findGoogleDocsLinks(
                           splitUrls[splitUrlsIndex]
                         );
 
-                        await this.googleService.processFilesFromFolder(
-                          folderId,
-                          `${folderDocs}${post.id}/docs/`
-                        );
-                      } else {
-                        let folderDocsJson = folderDocs + `${post.id}/docs`;
-                        const completeUrls = [];
-                        completeUrls.push(splitUrls[splitUrlsIndex]);
+                        if (googleDocsMatches.length > 0) {
+                          googleDocsMatches.forEach((googleDocUrl) => {
+                            const fieldId = findFileId(googleDocUrl);
+                            if (!fieldId) {
+                              console.log("Invalid Google Docs URL provided.");
+                            } else {
+                              filesIds.push(fieldId);
+                            }
+                          });
+                        }
 
-                        const data = {
-                          urls: [completeUrls],
-                        };
+                        //saving files
+                        const savingFilesStatuses = [
+                          "Accepted",
+                          "Child Bounty awarded",
+                          "Rejected",
+                          "Cancelled",
+                          "Child Bounty added",
+                        ];
 
-                        const buffer = Buffer.from(JSON.stringify(data));
-                        await this.awsStorageService.uploadFilesToS3(
-                          buffer,
-                          `${folderDocsJson}/docs_urls.json`,
-                          "application/json"
-                        );
+                        if (savingFilesStatuses.includes(post.status)) {
+                          let folderDocsFile = folderDocs + `${post.id}/docs`;
 
-                        await this.fileService.saveDataToFile(
-                          `${folderDocsJson}/docs_urls.json`,
-                          data
-                        );
+                          if (filesIds.length) {
+                            await Promise.all(
+                              filesIds.map(async (fileId) => {
+                                await this.googleService.uploadGoogleDocToS3(
+                                  fileId,
+                                  folderDocsFile
+                                );
+                              })
+                            );
+                          }
+
+                          //Ensure that even if we can't access or download the file we save the links
+                          const data = {
+                            urls: urls,
+                          };
+
+                          const dataBuffer = Buffer.from(JSON.stringify(data));
+                          await this.awsStorageService.uploadFilesToS3(
+                            dataBuffer,
+                            `${folderDocsFile}/docs_urls.json`,
+                            "application/json"
+                          );
+
+                          const folderId = extractFolderId(
+                            splitUrls[splitUrlsIndex]
+                          );
+
+                          await this.googleService.processFilesFromFolder(
+                            folderId,
+                            `${folderDocs}${post.id}/docs/`
+                          );
+                        } else {
+                          let folderDocsJson = folderDocs + `${post.id}/docs`;
+                          const completeUrls = [];
+                          completeUrls.push(splitUrls[splitUrlsIndex]);
+
+                          const data = {
+                            urls: [completeUrls],
+                          };
+
+                          const buffer = Buffer.from(JSON.stringify(data));
+                          await this.awsStorageService.uploadFilesToS3(
+                            buffer,
+                            `${folderDocsJson}/docs_urls.json`,
+                            "application/json"
+                          );
+
+                          await this.fileService.saveDataToFile(
+                            `${folderDocsJson}/docs_urls.json`,
+                            data
+                          );
+                        }
                       }
+
+                      const buffer = Buffer.from(JSON.stringify(post));
+
+                      let folderJson = folder + `${post.id}`;
+                      await this.awsStorageService.uploadFilesToS3(
+                        buffer,
+                        `${folderJson}/#${post.id}.json`,
+                        "application/json"
+                      );
                     }
-
-                    const buffer = Buffer.from(JSON.stringify(post));
-
-                    let folderJson = folder + `${post.id}`;
-                    await this.awsStorageService.uploadFilesToS3(
-                      buffer,
-                      `${folderJson}/#${post.id}.json`,
-                      "application/json"
-                    );
-                  }
-                });
-              })
-            );
-          } else if (
-            existingMeetUpsEventsPostsFolderList === null ||
-            (existingMeetUpsEventsPostsFolderList &&
-              existingMeetUpsEventsPostsFolderList.length === 0)
-          ) {
-            console.log("Updating all data");
-            await Promise.allSettled(
-              storedList.posts.map(async (post) => {
-                const splitUrls = [];
-
-                if (post.proposalFolderlLink !== "") {
-                  const proposalLinks = post.proposalFolderlLink
-                    .split("https")
-                    .filter((part) => part !== "");
-
-                  proposalLinks.forEach((link) => {
-                    splitUrls.push(`https${link}`);
                   });
-                }
+                })
+              );
+            } else if (
+              existingMeetUpsEventsPostsFolderList === null ||
+              (existingMeetUpsEventsPostsFolderList &&
+                existingMeetUpsEventsPostsFolderList.length === 0)
+            ) {
+              console.log("Updating all data");
+              await Promise.allSettled(
+                storedList.posts.map(async (post) => {
+                  const splitUrls = [];
 
-                if (post.reportFolderLink !== "") {
-                  const reportLinks = post.reportFolderLink
-                    .split("https")
-                    .filter((part) => part !== "");
+                  if (post.proposalFolderlLink !== "") {
+                    const proposalLinks = post.proposalFolderlLink
+                      .split("https")
+                      .filter((part) => part !== "");
 
-                  reportLinks.forEach((link) => {
-                    splitUrls.push(`https${link}`);
-                  });
-                }
-
-                const urls = [...splitUrls];
-
-                for (
-                  let splitUrlsIndex = 0;
-                  splitUrlsIndex < splitUrls.length;
-                  splitUrlsIndex++
-                ) {
-                  const filesIds = [];
-                  const googleDocsMatches = findGoogleDocsLinks(
-                    splitUrls[splitUrlsIndex]
-                  );
-
-                  if (googleDocsMatches.length > 0) {
-                    googleDocsMatches.forEach((googleDocUrl) => {
-                      const fieldId = findFileId(googleDocUrl);
-                      if (!fieldId) {
-                        console.log("Invalid Google Docs URL provided.");
-                      } else {
-                        filesIds.push(fieldId);
-                      }
+                    proposalLinks.forEach((link) => {
+                      splitUrls.push(`https${link}`);
                     });
                   }
 
-                  //saving files
-                  const savingFilesStatuses = [
-                    "Accepted",
-                    "Child Bounty awarded",
-                    "Rejected",
-                    "Cancelled",
-                    "Child Bounty added",
-                  ];
+                  if (post.reportFolderLink !== "") {
+                    const reportLinks = post.reportFolderLink
+                      .split("https")
+                      .filter((part) => part !== "");
 
-                  if (savingFilesStatuses.includes(post.status)) {
-                    let folderDocsFile = folderDocs + `${post.id}/docs`;
+                    reportLinks.forEach((link) => {
+                      splitUrls.push(`https${link}`);
+                    });
+                  }
 
-                    if (filesIds.length) {
-                      await Promise.allSettled(
-                        filesIds.map(async (fileId) => {
-                          await this.googleService.uploadGoogleDocToS3(
-                            fileId,
-                            folderDocsFile
-                          );
-                        })
-                      );
+                  const urls = [...splitUrls];
+
+                  for (
+                    let splitUrlsIndex = 0;
+                    splitUrlsIndex < splitUrls.length;
+                    splitUrlsIndex++
+                  ) {
+                    const filesIds = [];
+                    const googleDocsMatches = findGoogleDocsLinks(
+                      splitUrls[splitUrlsIndex]
+                    );
+
+                    if (googleDocsMatches.length > 0) {
+                      googleDocsMatches.forEach((googleDocUrl) => {
+                        const fieldId = findFileId(googleDocUrl);
+                        if (!fieldId) {
+                          console.log("Invalid Google Docs URL provided.");
+                        } else {
+                          filesIds.push(fieldId);
+                        }
+                      });
                     }
 
-                    //Ensure that even if we can't access or download the file we save the links
-                    const data = {
-                      urls: urls,
-                    };
+                    //saving files
+                    const savingFilesStatuses = [
+                      "Accepted",
+                      "Child Bounty awarded",
+                      "Rejected",
+                      "Cancelled",
+                      "Child Bounty added",
+                    ];
 
-                    const dataBuffer = Buffer.from(JSON.stringify(data));
-                    await this.awsStorageService.uploadFilesToS3(
-                      dataBuffer,
-                      `${folderDocsFile}/docs_urls.json`,
-                      "application/json"
-                    );
-                    const folderId = extractFolderId(splitUrls[splitUrlsIndex]);
+                    if (savingFilesStatuses.includes(post.status)) {
+                      let folderDocsFile = folderDocs + `${post.id}/docs`;
 
-                    await this.googleService.processFilesFromFolder(
-                      folderId,
-                      `${folderDocs}${post.id}/docs/`
-                    );
-                  } else {
-                    let folderDocsJson = folderDocs + `${post.id}/docs`;
-                    const completeUrls = [];
-                    completeUrls.push(splitUrls[splitUrlsIndex]);
+                      if (filesIds.length) {
+                        await Promise.allSettled(
+                          filesIds.map(async (fileId) => {
+                            await this.googleService.uploadGoogleDocToS3(
+                              fileId,
+                              folderDocsFile
+                            );
+                          })
+                        );
+                      }
 
-                    const data = {
-                      urls: completeUrls,
-                    };
+                      //Ensure that even if we can't access or download the file we save the links
+                      const data = {
+                        urls: urls,
+                      };
 
-                    const buffer = Buffer.from(JSON.stringify(data));
-                    await this.awsStorageService.uploadFilesToS3(
-                      buffer,
-                      `${folderDocsJson}/docs_urls.json`,
-                      "application/json"
-                    );
+                      const dataBuffer = Buffer.from(JSON.stringify(data));
+                      await this.awsStorageService.uploadFilesToS3(
+                        dataBuffer,
+                        `${folderDocsFile}/docs_urls.json`,
+                        "application/json"
+                      );
+                      const folderId = extractFolderId(
+                        splitUrls[splitUrlsIndex]
+                      );
+
+                      await this.googleService.processFilesFromFolder(
+                        folderId,
+                        `${folderDocs}${post.id}/docs/`
+                      );
+                    } else {
+                      let folderDocsJson = folderDocs + `${post.id}/docs`;
+                      const completeUrls = [];
+                      completeUrls.push(splitUrls[splitUrlsIndex]);
+
+                      const data = {
+                        urls: completeUrls,
+                      };
+
+                      const buffer = Buffer.from(JSON.stringify(data));
+                      await this.awsStorageService.uploadFilesToS3(
+                        buffer,
+                        `${folderDocsJson}/docs_urls.json`,
+                        "application/json"
+                      );
+                    }
                   }
-                }
 
-                const buffer = Buffer.from(JSON.stringify(post));
+                  const buffer = Buffer.from(JSON.stringify(post));
 
-                let folderJson = folder + `${post.id}`;
-                await this.awsStorageService.uploadFilesToS3(
-                  buffer,
-                  `${folderJson}/#${post.id}.json`,
-                  "application/json"
-                );
-              })
-            );
+                  let folderJson = folder + `${post.id}`;
+                  await this.awsStorageService.uploadFilesToS3(
+                    buffer,
+                    `${folderJson}/#${post.id}.json`,
+                    "application/json"
+                  );
+                })
+              );
+            }
           }
         }
-      }
 
-      console.log(
-        "Scheduled task updateOffChainMeetUpEventsPostFolder completed successfully."
-      );
-    } catch (err) {
-      console.log(
-        "Error executing scheduled updateOffChainMeetUpEventsPostFolder task:",
-        err
-      );
-      throw Error(
-        "Error executing scheduled updateOffChainMeetUpEventsPostFolder task"
-      );
-    }
+        console.log(
+          "Scheduled task updateOffChainMeetUpEventsPostFolder completed successfully."
+        );
+      } catch (err) {
+        console.log(
+          "Error executing scheduled updateOffChainMeetUpEventsPostFolder task:",
+          err
+        );
+        throw Error(
+          "Error executing scheduled updateOffChainMeetUpEventsPostFolder task"
+        );
+      }
     });
   }
 
@@ -1074,6 +1100,7 @@ export class SchedulerService {
           "Error executing scheduled updateOnChainDataToVectorStore task:",
           err
         );
+        throw new Error("Error executing scheduled updateOnChainDataToVectorStore task");
       }
     });
   }
@@ -1621,8 +1648,10 @@ export class SchedulerService {
       console.log("Running scheduled task: updateDynamoDb ...");
       try {
         await this.dynamoDBController._updateDataToDynamoDBTable();
+        console.log("Scheduled task updateDynamoDb completed successfully.");
       } catch (err) {
         console.log("Error executing scheduled updateDynamoDb task:", err);
+        throw new Error("Error executing scheduled updateDynamoDb task");
       }
     });
   }

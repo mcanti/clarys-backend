@@ -11,7 +11,8 @@
     "start": "node -r dotenv/config dist/server.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "test:clearCache": "jest --clearCache"
   },
   "author": "",
   "license": "ISC",
@@ -22,6 +23,7 @@
     "@aws-sdk/client-secrets-manager": "^3.675.0",
     "@aws-sdk/lib-storage": "^3.676.0",
     "@aws-sdk/node-http-handler": "^3.370.0",
+    "@aws-sdk/util-stream-node": "^3.370.0",
     "@polkadot/api": "^14.1.1",
     "aws-sdk": "^2.1691.0",
     "axios": "^1.7.7",

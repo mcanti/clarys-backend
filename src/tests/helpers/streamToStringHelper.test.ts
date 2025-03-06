@@ -8,7 +8,6 @@ import {
   s3BodyToResponseLike,
   s3ToFileLike,
   ensureReadableStream,
-  mimicFsCreateReadStream,
   webStreamToNodeReadable,
 } from "../../helpers/streamToStringHelper";
 
@@ -17,16 +16,101 @@ import { GetObjectCommandOutput } from "@aws-sdk/client-s3";
 
 describe("streamToString", () => {
   it("should convert a readable stream to a string", async () => {
-    const stream = Readable.from("Hello, world!");
+    const stream = Readable.from(["Hello, world!"]); // Ensure an array is passed
     const result = await streamToString(stream);
     expect(result).toBe("Hello, world!");
   });
 
+  it("should handle Uint8Array chunks in the stream", async () => {
+    const uintArray = new Uint8Array([72, 101, 108, 108, 111]); // "Hello" in bytes
+    const stream = new Readable({
+      read() {
+        this.push(uintArray);
+        this.push(null);
+      },
+    });
+  
+    const result = await streamToString(stream);
+    expect(result).toBe("Hello");
+  });
+
   it("should return an empty string for an empty stream", async () => {
-    const stream = Readable.from("");
+    const stream = Readable.from([]); // Empty array to properly simulate an empty stream
     const result = await streamToString(stream);
     expect(result).toBe("");
   });
+
+  it("should reject for unsupported chunk type", async () => {
+    const badStream = new Readable({
+      read() {} // Empty read method to simulate _read()
+    });
+  
+    setImmediate(() => {
+      badStream.emit("data", { key: "value" }); // Emit an object as an invalid chunk
+      badStream.emit("end");
+    });
+  
+    await expect(streamToString(badStream)).rejects.toThrow("Unsupported chunk type: object");
+  });
+
+  it("should reject when stream emits an error", async () => {
+    const badStream = new Readable({
+      read() {}
+    });
+  
+    setImmediate(() => {
+      badStream.emit("error", new Error("Stream failure"));
+    });
+  
+    await expect(streamToString(badStream)).rejects.toThrow("Stream failure");
+  });
+
+  it("should reject if the stream emits an error before any data is read", async () => {
+    const failingStream = new Readable({
+      read() {},
+    });
+  
+    setImmediate(() => failingStream.emit("error", new Error("Early stream failure")));
+  
+    await expect(streamToString(failingStream)).rejects.toThrow("Early stream failure");
+  });
+
+  it("should return an empty string if the stream closes immediately", async () => {
+    const emptyStream = new Readable({
+      read() {
+        this.push(null);
+      },
+    });
+  
+    const result = await streamToString(emptyStream);
+    expect(result).toBe("");
+  });
+
+  it("should resolve an empty string when stream ends without emitting data", async () => {
+    const emptyStream = new Readable({
+      read() {
+        this.push(null);
+      },
+    });
+  
+    const result = await streamToString(emptyStream);
+    expect(result).toBe("");
+  });
+
+  it("should remove all listeners and reject when stream emits an error", async () => {
+    const badStream = new Readable({
+      read() {},
+    });
+  
+    setImmediate(() => {
+      badStream.emit("error", new Error("Stream failure"));
+    });
+  
+    await expect(streamToString(badStream)).rejects.toThrow("Stream failure");
+    expect(badStream.listenerCount("data")).toBe(0);
+  });
+  
+  
 });
 
 describe("stringToStream", () => {
@@ -129,6 +213,27 @@ describe("s3ToFileLike", () => {
     expect(fileLike.size).toBe(15);
     expect(await fileLike.text()).toBe("S3 file content");
   });
+
+  it("should throw an error when s3Object.Body is null", async () => {
+    const mockS3Object = { Body: null } as any;
+    await expect(s3ToFileLike(mockS3Object, "test.txt")).rejects.toThrow();
+  });
+
+  it("should throw an error if s3Object.Body is a number", async () => {
+    const mockS3Object = { Body: 12345 } as any;
+    await expect(s3ToFileLike(mockS3Object, "file.txt")).rejects.toThrow();
+  });  
+
+  it("should throw an error if s3Object.Body is not a readable stream", async () => {
+    const mockS3Object = { Body: null } as any;
+    await expect(s3ToFileLike(mockS3Object, "test.txt")).rejects.toThrow();
+  });
+
+  it("should throw an error when s3Object.Body is missing", async () => {
+    const mockS3Object = { Body: undefined } as any;
+    await expect(s3ToFileLike(mockS3Object, "file.txt")).rejects.toThrow();
+  });
+  
 });
 
 describe("ensureReadableStream", () => {
@@ -136,6 +241,13 @@ describe("ensureReadableStream", () => {
     const stream = Readable.from("Stream data");
     expect(ensureReadableStream(stream)).toBe(stream);
   });
+
+  it("should convert a Uint8Array to a readable stream", async () => {
+    const uint8Array = new Uint8Array([72, 101, 108, 108, 111]); // "Hello"
+    const stream = ensureReadableStream(uint8Array);
+    expect(await streamToString(stream)).toBe("Hello");
+  });
+  
 
   it("should convert a string to a readable stream", async () => {
     const stream = ensureReadableStream("String data");
@@ -153,29 +265,82 @@ describe("ensureReadableStream", () => {
     const stream = ensureReadableStream(uint8Array);
     expect(await streamToString(stream)).toBe("Hello");
   });
-});
 
-describe("mimicFsCreateReadStream", () => {
-  it("should mimic fs.createReadStream", async () => {
-    const stream = Readable.from("Mimic stream");
-    const fsStream = mimicFsCreateReadStream(stream, "/fake/path.txt");
-
-    expect(fsStream).toBeInstanceOf(PassThrough);
-    expect((fsStream as any).path).toBe("/fake/path.txt");
-    expect(await streamToString(fsStream)).toBe("Mimic stream");
+  it("should handle Uint8Array input", async () => {
+    const uintArray = new Uint8Array([72, 101, 108, 108, 111]); // "Hello" in bytes
+    const stream = ensureReadableStream(uintArray);
+    
+    expect(stream).toBeInstanceOf(Readable);
+    const result = await streamToString(stream);
+    expect(result).toBe("Hello");
   });
-});
 
-describe("webStreamToNodeReadable", () => {
-  it("should convert a web ReadableStream to a Node.js Readable", async () => {
-    const webStream = new ReadableStream({
+  it("should convert a browser-native ReadableStream to a Node.js Readable", async () => {
+    const mockWebStream = new ReadableStream({
       start(controller) {
-        controller.enqueue(new TextEncoder().encode("Web stream"));
+        controller.enqueue(new TextEncoder().encode("Hello World"));
         controller.close();
       },
     });
+  
+    const nodeStream = ensureReadableStream(mockWebStream);
+    expect(nodeStream).toBeInstanceOf(Readable);
+  
+    const result = await streamToString(nodeStream);
+    expect(result).toBe("Hello World");
+  });  
 
-    const nodeStream = await webStreamToNodeReadable(webStream);
-    expect(await streamToString(nodeStream)).toBe("Web stream");
+  it("should throw an error for unsupported input type in ensureReadableStream", () => {
+    expect(() => ensureReadableStream(123 as any)).toThrow("Unsupported S3 Body type");
+  });
+
+  it("should throw an error for unsupported input (null) in ensureReadableStream", () => {
+    expect(() => ensureReadableStream(null)).toThrow("Unsupported S3 Body type");
+  });
+
+  it("should throw an error for unsupported input (empty object) in ensureReadableStream", () => {
+    expect(() => ensureReadableStream({} as any)).toThrow("Unsupported S3 Body type");
+  });
+    
+  it("should throw an error for unsupported input (array) in ensureReadableStream", () => {
+    expect(() => ensureReadableStream([1, 2, 3] as any)).toThrow("Unsupported S3 Body type");
+  });
+  
+});
+
+describe("webStreamToNodeReadable", () => {
+  it("should reject if web ReadableStream fails", async () => {
+    const failingWebStream = new ReadableStream({
+      start(controller) {
+        setTimeout(() => {
+          controller.error(new Error("Web stream error")); // Simulate an async failure
+        }, 10);
+      },
+    });
+  
+    await expect(webStreamToNodeReadable(failingWebStream)).rejects.toThrow("Web stream error");
+  });
+  
+
+  it("should reject if web ReadableStream fails", async () => {
+    const failingWebStream = new ReadableStream({
+      start(controller) {
+        controller.error(new Error("Web stream error")); // Force an error
+      },
+    });
+  
+    await expect(webStreamToNodeReadable(failingWebStream)).rejects.toThrow("Web stream error");
+  });
+
+  it("should return an empty stream when web stream has no data", async () => {
+    const emptyWebStream = new ReadableStream({
+      start(controller) {
+        controller.close();
+      },
+    });
+  
+    const nodeStream = await webStreamToNodeReadable(emptyWebStream);
+    const result = await streamToString(nodeStream);
+    expect(result).toBe("");
   });
 });
